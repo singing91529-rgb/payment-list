@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Payment Hub hero illustration with animated glow">
+  <title>Payment Hub — animated hero illustration</title>
+  <defs>
+    <!-- soft radial gradient for glow -->
+    <radialGradient id="glowA" cx="30%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#5eead4" stop-opacity="0.28">
+        <animate attributeName="stop-opacity" values="0.18;0.32;0.18" dur="6s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="60%" stop-color="#60a5fa" stop-opacity="0.08">
+        <animate attributeName="stop-opacity" values="0.05;0.12;0.05" dur="7s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="glowB" cx="70%" cy="70%" r="50%">
+      <stop offset="0%" stop-color="#f9a8d4" stop-opacity="0.20">
+        <animate attributeName="stop-opacity" values="0.12;0.22;0.12" dur="5.5s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="60%" stop-color="#fca5a5" stop-opacity="0.06">
+        <animate attributeName="stop-opacity" values="0.03;0.09;0.03" dur="6.5s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- subtle vignette -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0" />
+      <stop offset="100%" stop-color="#000" stop-opacity="0.45" />
+    </radialGradient>
+
+    <!-- blur filter for glow -->
+    <filter id="softBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="40" result="b" />
+      <feBlend in="SourceGraphic" in2="b" mode="screen" />
+    </filter>
+
+    <!-- card gradient -->
+    <linearGradient id="cardGrad" x1="0" x2="1">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#0b1220" stop-opacity="0.85" />
+    </linearGradient>
+
+    <!-- subtle stripe gradient for card -->
+    <linearGradient id="stripe" x1="0" x2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02" />
+    </linearGradient>
+
+    <!-- small decorative circle -->
+    <radialGradient id="dot" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#fff" stop-opacity="0.05" />
+    </radialGradient>
+  </defs>
+
+  <!-- background glow shapes -->
+  <g filter="url(#softBlur)" opacity="0.95">
+    <circle cx="260" cy="160" r="220" fill="url(#glowA)" />
+    <circle cx="920" cy="420" r="180" fill="url(#glowB)" />
+  </g>
+
+  <!-- floating particles -->
+  <g id="particles" fill="#fff" opacity="0.06">
+    <circle cx="120" cy="420" r="6">
+      <animate attributeName="cy" dur="8s" values="420;340;420" repeatCount="indefinite" />
+      <animate attributeName="cx" dur="10s" values="120;180;120" repeatCount="indefinite" />
+      <animate attributeName="opacity" dur="6s" values="0.08;0.22;0.08" repeatCount="indefinite" />
+    </circle>
+    <circle cx="480" cy="80" r="10">
+      <animate attributeName="cy" dur="9s" values="80;20;80" repeatCount="indefinite" />
+      <animate attributeName="opacity" dur="7s" values="0.04;0.18;0.04" repeatCount="indefinite" />
+    </circle>
+    <circle cx="760" cy="210" r="8">
+      <animate attributeName="cx" dur="12s" values="760;840;760" repeatCount="indefinite" />
+      <animate attributeName="opacity" dur="8s" values="0.05;0.16;0.05" repeatCount="indefinite" />
+    </circle>
+    <circle cx="1080" cy="120" r="5">
+      <animate attributeName="cy" dur="11s" values="120;40;120" repeatCount="indefinite" />
+      <animate attributeName="opacity" dur="9s" values="0.03;0.12;0.03" repeatCount="indefinite" />
+    </circle>
+  </g>
+
+  <!-- main layout: left decorative card + right smaller cards for depth -->
+  <g id="art" transform="translate(0,0)">
+    <!-- large card -->
+    <g id="cardMain" transform="translate(220,180)">
+      <rect x="0" y="0" width="640" height="320" rx="20" ry="20" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.04)" stroke-width="1" />
+      <!-- stripe -->
+      <rect x="0" y="40" width="640" height="28" fill="url(#stripe)" opacity="0.9" />
+      <!-- chip -->
+      <rect x="36" y="100" width="64" height="48" rx="6" fill="#f8fafc" opacity="0.9" />
+      <rect x="44" y="108" width="48" height="32" rx="4" fill="#1f2937" opacity="0.06" />
+      <!-- card number -->
+      <g fill="#e6eefc" opacity="0.92" transform="translate(36,170)">
+        <rect x="0" y="0" width="420" height="18" rx="4" fill="#ffffff" opacity="0.03" />
+        <text x="8" y="14" font-family="Segoe UI, Roboto, -apple-system, 'Helvetica Neue', Arial" font-size="16" fill="#e6eefc">**** **** **** 079</text>
+      </g>
+      <!-- card holder -->
+      <text x="36" y="250" font-family="Segoe UI, Roboto, -apple-system, 'Helvetica Neue', Arial" font-size="14" fill="#cbd5e1" opacity="0.95">李 欣 穎</text>
+
+      <!-- white glossy reflection -->
+      <path d="M0,0 C120,30 260,10 380,30 L640,10 L640,0 Z" fill="#fff" opacity="0.02" />
+      <!-- subtle inner glow -->
+      <rect x="8" y="8" width="624" height="304" rx="16" ry="16" fill="none" stroke="#ffffff" opacity="0.02" />
+    </g>
+
+    <!-- smaller depth card behind, animated slightly for parallax -->
+    <g id="cardBack" transform="translate(150,220) rotate(-6)">
+      <rect x="0" y="0" width="480" height="240" rx="18" fill="#071028" opacity="0.22" />
+      <rect x="12" y="12" width="456" height="216" rx="14" fill="url(#cardGrad)" opacity="0.65" />
+      <!-- animate slight bobbing -->
+      <animateTransform attributeName="transform" type="translate" values="150,220;150,216;150,220" dur="6s" repeatCount="indefinite" />
+    </g>
+
+    <!-- tiny card in front for layering -->
+    <g id="cardFront" transform="translate(540,130) rotate(6)">
+      <rect x="0" y="0" width="260" height="160" rx="12" fill="#0b1220" opacity="0.9" />
+      <rect x="10" y="14" width="240" height="24" rx="6" fill="#ffffff" opacity="0.03" />
+      <rect x="20" y="54" width="200" height="16" rx="6" fill="#ffffff" opacity="0.02" />
+      <animateTransform attributeName="transform" type="translate" values="540,130;540,126;540,130" dur="5.2s" repeatCount="indefinite" />
+    </g>
+  </g>
+
+  <!-- vignette overlay -->
+  <rect x="0" y="0" width="1200" height="600" fill="url(#vignette)" opacity="0.6" />
+
+  <!-- accessibility: reduce motion support: hide animated particles when user prefers reduced motion -->
+  <style type="text/css"><![CDATA[
+    @media (prefers-reduced-motion: reduce) {
+      /* hide or freeze SMIL animations by hiding high-motion groups */
+      #particles, #cardBack, #cardFront {
+        display: none;
+      }
+      /* reduce glow intensity */
+      circle[fill^="url(#glowA)"], circle[fill^="url(#glowB)"] { opacity: 0.45 !important; filter: none !important; }
+    }
+  ]]></style>
+</svg>

@@ -45,6 +45,19 @@ const BANKS = [
     hasQr: false
   },
   {
+    name: "郵局",
+    code: "700",
+    account: "00010680622731",
+    image: "",
+    hasQr: false
+  },{
+    name: "臺灣銀行",
+    code: "004",
+    account: "033008194482",
+    image: "",
+    hasQr: false
+  },
+  {
     name: "樂天銀行",
     code: "826",
     account: "8120100248962",

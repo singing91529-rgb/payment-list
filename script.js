@@ -48,7 +48,7 @@ const BANKS = [
     name: "樂天銀行",
     code: "826",
     account: "8120100248962",
-    image: "images/樂天.jpg",
+    image: "images/樂天銀行.jpg",
     hasQr: true
   }
 ];

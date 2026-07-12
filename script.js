@@ -50,7 +50,8 @@ const BANKS = [
     account: "00010680622731",
     image: "",
     hasQr: false
-  },{
+  },
+  {
     name: "臺灣銀行",
     code: "004",
     account: "033008194482",

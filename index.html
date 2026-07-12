@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment Hub</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <h1 class="site-title">Payment Hub</h1>
+        <p class="site-subtitle">Choose Your Payment Method</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-inner container">
+        <h2 class="hero-title">Payment Hub</h2>
+        <p class="hero-subtitle">Choose Your Payment Method</p>
+      </div>
+    </section>
+
+    <section class="sections container">
+      <!-- Bank Transfer -->
+      <div class="section-block">
+        <h3 class="section-title">🏦 Bank Transfer</h3>
+        <div id="banks-grid" class="grid cards-grid"></div>
+      </div>
+
+      <!-- E-Wallet -->
+      <div class="section-block">
+        <h3 class="section-title">📱 E-Wallet</h3>
+        <div id="ewallet-grid" class="grid cards-grid"></div>
+      </div>
+
+      <!-- USDT -->
+      <div class="section-block">
+        <h3 class="section-title">💰 USDT (TRC20)</h3>
+        <div class="usdt-card card glass">
+          <div class="card-media">
+            <img src="images/ustd.jpg" alt="USDT (TRC20)" class="card-img qr-img" data-full="images/ustd.jpg">
+          </div>
+          <div class="card-body">
+            <h4 class="card-name">USDT (TRC20)</h4>
+            <p class="muted">Wallet Address</p>
+            <pre id="usdt-address" class="address">TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2</pre>
+            <div class="card-actions">
+              <button class="btn ripple" id="copy-usdt">Copy Wallet Address</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>© 2026 Payment Hub</p>
+    </div>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- QR Modal -->
+  <div id="qr-modal" class="modal" aria-hidden="true">
+    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="modal-content" role="dialog" aria-modal="true">
+      <button id="modal-close" class="modal-close" aria-label="Close">✕</button>
+      <img id="modal-img" src="" alt="QR full view">
+      <p id="modal-caption" class="muted"></p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

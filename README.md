@@ -3,13 +3,14 @@
 A static payment methods website (HTML/CSS/Vanilla JS) ready to deploy on GitHub Pages.
 
 Features
-- Dark theme with glassmorphism and smooth animations
-- Responsive grid (Desktop: 4 cols, Tablet: 2 cols, Mobile: 1 col)
-- Bank transfer cards (7 banks)
-- E-Wallet QR cards
-- USDT (TRC20) with copy wallet address
-- Click any QR/image to view fullscreen modal (ESC or click background to close)
-- Copy buttons use `navigator.clipboard.writeText()` and show a toast confirmation
-- CSS-only glass effects and JS for interactions (no frameworks, no backend)
+- Dark glassmorphism theme with responsive layouts and reduced-motion support
+- Bank transfer cards for 9 banks, e-wallet QR cards, and USDT (TRC20)
+- Search by bank name, code, account number, or e-wallet name
+- Favorites saved in browser `localStorage`
+- Fullscreen QR viewer for actual payment QR images (ESC or backdrop to close)
+- Copy bank accounts, bank codes, combined bank details, e-wallet names, and the USDT wallet address
+- Toast feedback, subtle animations, and Vanilla HTML/CSS/JavaScript (no frameworks or backend)
+
+Payment images use relative paths from `index.html` so the static site can be hosted on GitHub Pages.
 
 Project structure

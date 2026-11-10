@@ -78,6 +78,11 @@ let USDT_ADDRESS = "TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2";
 /* ---------- DOM references ---------- */
 const banksGrid = document.getElementById("banks-grid");
 const ewalletGrid = document.getElementById("ewallet-grid");
+const favoritesGrid = document.getElementById("favorites-grid");
+const favoritesSection = document.getElementById("favorites-section");
+const searchInput = document.getElementById("payment-search");
+const clearSearchBtn = document.getElementById("clear-search");
+const searchEmpty = document.getElementById("search-empty");
 const toastEl = document.getElementById("toast");
 const qrModal = document.getElementById("qr-modal");
 const modalImg = document.getElementById("modal-img");
@@ -86,6 +91,12 @@ const modalOverlay = document.getElementById("modal-overlay");
 const modalClose = document.getElementById("modal-close");
 const usdtAddressEl = document.getElementById("usdt-address");
 const copyUsdtBtn = document.getElementById("copy-usdt");
+const usdtCard = copyUsdtBtn.closest(".usdt-card");
+const FAVORITES_STORAGE_KEY = "payment-hub-favorites";
+let favorites = new Set();
+let cardObserver;
+let modalCloseTimer;
+let previousModalFocus;
 
 /* ---------- Helpers ---------- */
 function createEl(tag, attrs = {}, ...children) {
@@ -107,7 +118,7 @@ function createEl(tag, attrs = {}, ...children) {
   return el;
 }
 
-function showToast(text = "Copied Successfully", duration = 2000) {
+function showToast(text = "Copied Successfully", duration = 2400) {
   toastEl.textContent = text;
   toastEl.classList.add("show");
   clearTimeout(toastEl._t);
@@ -116,14 +127,50 @@ function showToast(text = "Copied Successfully", duration = 2000) {
   }, duration);
 }
 
-async function copyText(text) {
+async function copyText(text, successMessage = "Copied successfully") {
   try {
     await navigator.clipboard.writeText(text);
-    showToast("Copied Successfully");
+    showToast(successMessage);
   } catch (err) {
     console.error("Copy failed", err);
-    showToast("Copy failed");
+    showToast("Unable to copy. Check clipboard permissions and try again.");
   }
+}
+
+function loadFavorites() {
+  try {
+    const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (!saved) return new Set();
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || parsed.some(id => typeof id !== "string")) {
+      throw new TypeError("Saved favorites must be an array of payment IDs.");
+    }
+    return new Set(parsed);
+  } catch (err) {
+    console.error("Could not load favorites", err);
+    showToast("Saved favorites could not be loaded.");
+    return new Set();
+  }
+}
+
+function saveFavorites() {
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favorites]));
+  } catch (err) {
+    console.error("Could not save favorites", err);
+    showToast("Favorites could not be saved on this device.");
+  }
+}
+
+function makeFavoriteButton(paymentId, name) {
+  const isFavorite = favorites.has(paymentId);
+  return createEl("button", {
+    class: `favorite-toggle${isFavorite ? " is-favorite" : ""}`,
+    type: "button",
+    dataset: { action: "favorite", paymentId },
+    "aria-label": `${isFavorite ? "Remove" : "Add"} ${name} ${isFavorite ? "from" : "to"} favorites`,
+    "aria-pressed": String(isFavorite)
+  }, "★");
 }
 
 /* ripple effect */
@@ -143,57 +190,87 @@ function createRipple(e) {
 }
 
 /* modal open/close */
-function openModal(imgSrc, caption = "") {
+function openModal(imgSrc, provider = "") {
+  clearTimeout(modalCloseTimer);
+  previousModalFocus = document.activeElement;
   modalImg.src = imgSrc;
-  modalCaption.textContent = caption;
+  modalImg.alt = `${provider} QR code`;
+  modalCaption.textContent = provider;
   qrModal.setAttribute("aria-hidden", "false");
+  qrModal.classList.remove("is-closing");
   document.body.style.overflow = "hidden";
+  modalClose.focus();
 }
 function closeModal() {
-  qrModal.setAttribute("aria-hidden", "true");
-  modalImg.src = "";
-  document.body.style.overflow = "";
+  if (qrModal.getAttribute("aria-hidden") === "true" || qrModal.classList.contains("is-closing")) return;
+  qrModal.classList.add("is-closing");
+  modalCloseTimer = setTimeout(() => {
+    qrModal.setAttribute("aria-hidden", "true");
+    qrModal.classList.remove("is-closing");
+    modalImg.src = "";
+    document.body.style.overflow = "";
+    if (previousModalFocus && typeof previousModalFocus.focus === "function") previousModalFocus.focus();
+  }, 220);
 }
 
 /* ---------- Render functions ---------- */
 
 function makeBankCard(bank) {
-  const card = createEl("div", { class: "card glass" });
+  const paymentId = `bank:${bank.code}`;
+  const card = createEl("div", {
+    class: "card glass payment-card",
+    dataset: { paymentId, search: `${bank.name} ${bank.code} ${bank.account}` }
+  });
 
   // media area (QR or placeholder)
   const media = createEl("div", { class: "card-media center" });
   if (bank.hasQr && bank.image) {
-    const img = createEl("img", { class: "card-img qr-img", src: bank.image, alt: `${bank.name} QR`, "data-full": bank.image });
+    const img = createEl("img", {
+      class: "card-img qr-img payment-qr",
+      src: bank.image,
+      alt: `${bank.name} QR`,
+      dataset: { full: bank.image, provider: bank.name }
+    });
     media.appendChild(img);
-    // clicking image opens modal
-    img.addEventListener("click", (e) => openModal(bank.image, `${bank.name} - ${bank.code}`));
   } else {
-    const coming = createEl("div", { class: "center", style: "flex-direction:column; padding:12px; color:#f0f0f0;" },
-      createEl("div", {}, "Coming Soon"),
-      createEl("small", { class: "muted", style: "margin-top:6px; font-size:12px;" }, "QR Coming Soon")
+    const coming = createEl("div", { class: "coming-soon" },
+      createEl("span", { class: "coming-soon-icon", "aria-hidden": "true" }, "⌁"),
+      createEl("strong", {}, "Coming Soon"),
+      createEl("small", {}, "QR code unavailable")
     );
     media.appendChild(coming);
   }
 
   // body
   const body = createEl("div", { class: "card-body" });
-  const name = createEl("h4", { class: "card-name" }, bank.name);
+  const heading = createEl("div", { class: "card-heading" },
+    createEl("h4", { class: "card-name" }, bank.name),
+    makeFavoriteButton(paymentId, bank.name)
+  );
   const meta = createEl("div", { class: "meta" },
-    createEl("div", { class: "code" }, `Code: ${bank.code}`),
-    createEl("div", { class: "muted" }, `Account`)
+    createEl("span", { class: "code" }, `Bank code ${bank.code}`),
+    createEl("span", { class: "muted" }, "Account number")
   );
   const acc = createEl("pre", { class: "address" }, bank.account);
 
   const actions = createEl("div", { class: "card-actions" });
-  const copyBtn = createEl("button", { class: "btn ripple" }, "Copy");
-  copyBtn.addEventListener("click", async (e) => {
-    createRipple(e);
-    await copyText(`${bank.account}`);
-  });
+  actions.appendChild(createEl("button", {
+    class: "btn ripple",
+    type: "button",
+    dataset: { action: "copy-account", value: bank.account }
+  }, "Copy account"));
+  actions.appendChild(createEl("button", {
+    class: "btn btn-secondary ripple",
+    type: "button",
+    dataset: { action: "copy-code", value: bank.code }
+  }, "Copy code"));
+  actions.appendChild(createEl("button", {
+    class: "btn btn-secondary ripple copy-combined",
+    type: "button",
+    dataset: { action: "copy-bank-details", code: bank.code, account: bank.account }
+  }, "Copy both"));
 
-  actions.appendChild(copyBtn);
-
-  body.appendChild(name);
+  body.appendChild(heading);
   body.appendChild(meta);
   body.appendChild(acc);
   body.appendChild(actions);
@@ -205,27 +282,36 @@ function makeBankCard(bank) {
 }
 
 function makeEwalletCard(ew) {
-  const card = createEl("div", { class: "card glass" });
+  const paymentId = `ewallet:${ew.name}`;
+  const card = createEl("div", {
+    class: "card glass payment-card",
+    dataset: { paymentId, search: ew.name }
+  });
 
   const media = createEl("div", { class: "card-media center" });
-  const img = createEl("img", { class: "card-img qr-img", src: ew.image, alt: ew.name, "data-full": ew.image });
-  img.addEventListener("click", () => openModal(ew.image, ew.name));
+  const img = createEl("img", {
+    class: "card-img qr-img payment-qr",
+    src: ew.image,
+    alt: `${ew.name} QR`,
+    dataset: { full: ew.image, provider: ew.name }
+  });
   media.appendChild(img);
 
   const body = createEl("div", { class: "card-body" });
-  const name = createEl("h4", { class: "card-name" }, ew.name);
-  const desc = createEl("p", { class: "muted" }, "Tap to enlarge QR");
+  const heading = createEl("div", { class: "card-heading" },
+    createEl("h4", { class: "card-name" }, ew.name),
+    makeFavoriteButton(paymentId, ew.name)
+  );
+  const desc = createEl("p", { class: "muted" }, "Tap QR to view full size");
 
   const actions = createEl("div", { class: "card-actions" });
-  const copyBtn = createEl("button", { class: "btn ripple" }, "Copy Provider");
-  copyBtn.addEventListener("click", async (e) => {
-    createRipple(e);
-    await copyText(ew.name);
-  });
+  actions.appendChild(createEl("button", {
+    class: "btn ripple",
+    type: "button",
+    dataset: { action: "copy-provider", value: ew.name }
+  }, "Copy provider"));
 
-  actions.appendChild(copyBtn);
-
-  body.appendChild(name);
+  body.appendChild(heading);
   body.appendChild(desc);
   body.appendChild(actions);
 
@@ -249,27 +335,109 @@ function renderAll() {
   usdtAddressEl.textContent = USDT_ADDRESS;
 }
 
+function normalizeSearch(value) {
+  return value.toLocaleLowerCase().replace(/\s+/g, "");
+}
+
+function renderFavorites() {
+  const cards = [];
+  BANKS.filter(bank => favorites.has(`bank:${bank.code}`)).forEach(bank => cards.push(makeBankCard(bank)));
+  EWALLETS.filter(wallet => favorites.has(`ewallet:${wallet.name}`)).forEach(wallet => cards.push(makeEwalletCard(wallet)));
+  if (favorites.has("usdt:trc20")) {
+    const usdtFavoriteCard = usdtCard.cloneNode(true);
+    usdtFavoriteCard.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+    cards.push(usdtFavoriteCard);
+  }
+  favoritesGrid.replaceChildren(...cards);
+  favoritesSection.hidden = cards.length === 0;
+  observeCards(favoritesGrid);
+  applySearch();
+}
+
+function applySearch() {
+  const query = normalizeSearch(searchInput.value);
+  clearSearchBtn.hidden = query.length === 0;
+  let visiblePayments = 0;
+  const paymentCards = [
+    ...banksGrid.querySelectorAll(".payment-card"),
+    ...ewalletGrid.querySelectorAll(".payment-card"),
+    usdtCard
+  ];
+
+  paymentCards.forEach(card => {
+    const searchable = normalizeSearch(card.dataset.search || card.textContent);
+    const matches = !query || searchable.includes(query);
+    card.hidden = !matches;
+    if (matches) visiblePayments += 1;
+  });
+
+  document.querySelectorAll("#banks-grid, #ewallet-grid").forEach(grid => {
+    grid.closest(".section-block").hidden = ![...grid.children].some(card => !card.hidden);
+  });
+  usdtCard.closest(".section-block").hidden = usdtCard.hidden;
+
+  favoritesGrid.querySelectorAll(".payment-card").forEach(card => {
+    card.hidden = Boolean(query) && !normalizeSearch(card.dataset.search || card.textContent).includes(query);
+  });
+  favoritesSection.hidden = ![...favoritesGrid.children].some(card => !card.hidden);
+  searchEmpty.hidden = !query || visiblePayments > 0;
+}
+
+function toggleFavorite(paymentId) {
+  if (favorites.has(paymentId)) favorites.delete(paymentId);
+  else favorites.add(paymentId);
+  saveFavorites();
+  let name = paymentId;
+  document.querySelectorAll(".payment-card").forEach(card => {
+    if (card.dataset.paymentId !== paymentId) return;
+    const button = card.querySelector(".favorite-toggle");
+    name = card.querySelector(".card-name").textContent;
+    const isFavorite = favorites.has(paymentId);
+    button.classList.toggle("is-favorite", isFavorite);
+    button.setAttribute("aria-pressed", String(isFavorite));
+    button.setAttribute("aria-label", `${isFavorite ? "Remove" : "Add"} ${name} ${isFavorite ? "from" : "to"} favorites`);
+  });
+  renderFavorites();
+  showToast(favorites.has(paymentId) ? `${name} added to favorites` : `${name} removed from favorites`);
+}
+
 /* ---------- Events ---------- */
-copyUsdtBtn.addEventListener("click", async (e) => {
-  createRipple(e);
-  await copyText(USDT_ADDRESS);
+searchInput.addEventListener("input", applySearch);
+clearSearchBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  applySearch();
+  searchInput.focus();
+});
+
+document.addEventListener("click", async (e) => {
+  const target = e.target;
+  const favoriteButton = target.closest(".favorite-toggle");
+  if (favoriteButton) {
+    toggleFavorite(favoriteButton.dataset.paymentId);
+    return;
+  }
+
+  const actionButton = target.closest("button[data-action]");
+  if (actionButton) {
+    const { action, value, code, account } = actionButton.dataset;
+    if (action === "copy-account") await copyText(value, "Account number copied");
+    else if (action === "copy-code") await copyText(value, "Bank code copied");
+    else if (action === "copy-bank-details") {
+      await copyText(`Bank code: ${code}\nAccount number: ${account}`, "Bank code and account number copied");
+    } else if (action === "copy-provider") await copyText(value, "Payment provider copied");
+    else if (action === "copy-usdt") await copyText(USDT_ADDRESS, "USDT wallet address copied");
+    return;
+  }
+
+  const qrImage = target.closest("img.payment-qr");
+  if (qrImage) openModal(qrImage.dataset.full || qrImage.src, qrImage.dataset.provider || qrImage.alt);
 });
 
 /* Modal events */
 modalOverlay.addEventListener("click", closeModal);
 modalClose.addEventListener("click", closeModal);
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
-});
-
-/* Delegated click for clicking any .qr-img to open modal (covers dynamically created) */
-document.addEventListener("click", (e) => {
-  const target = e.target;
-  if (target.matches(".qr-img")) {
-    const src = target.dataset.full || target.src;
-    const caption = target.alt || "";
-    openModal(src, caption);
-  }
+  if (e.key === "Escape" && qrModal.getAttribute("aria-hidden") === "false") closeModal();
 });
 
 /* Add ripple to all future .ripple buttons through delegation */
@@ -280,16 +448,28 @@ document.addEventListener("pointerdown", (e) => {
 
 /* IntersectionObserver for card reveal animations */
 function setupObservers() {
-  const observer = new IntersectionObserver((entries) => {
+  if (!("IntersectionObserver" in window)) {
+    document.querySelectorAll(".card").forEach(card => card.classList.add("in-view"));
+    return;
+  }
+  cardObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add("in-view");
-        observer.unobserve(entry.target);
+        cardObserver.unobserve(entry.target);
       }
     });
   }, { threshold: 0.12 });
+  observeCards();
+}
 
-  document.querySelectorAll(".card").forEach(c => observer.observe(c));
+function observeCards(root = document) {
+  if (!("IntersectionObserver" in window)) {
+    root.querySelectorAll(".card").forEach(card => card.classList.add("in-view"));
+    return;
+  }
+  if (!cardObserver) return;
+  root.querySelectorAll(".card:not(.in-view)").forEach(card => cardObserver.observe(card));
 }
 
 /* Header/hero fade in */
@@ -306,7 +486,10 @@ function headerFadeIn() {
 
 /* ---------- Startup ---------- */
 document.addEventListener("DOMContentLoaded", () => {
+  favorites = loadFavorites();
   renderAll();
   setupObservers();
+  renderFavorites();
+  applySearch();
   headerFadeIn();
 });

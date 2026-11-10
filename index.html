@@ -17,33 +17,74 @@
   </header>
 
   <main>
-    <section class="hero">
-
-    <div class="hero-inner container">
-
-        <!-- Hero SVG -->
-        <div class="hero-art">
-            <img
-                src="images/hero-illustration.svg"
-                alt="Payment Hub Illustration">
-        </div>
-
-        <!-- Hero Text -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-inner container">
         <div class="hero-copy">
-            <h2 class="hero-title">
-                Payment Hub
-            </h2>
-
-            <p class="hero-subtitle">
-                Choose Your Payment Method
-            </p>
+          <p class="hero-eyebrow"><span class="eyebrow-dot"></span> YOUR PAYMENTS, IN ONE PLACE</p>
+          <h2 class="hero-title" id="hero-title">A simpler way to <span>move money.</span></h2>
+          <p class="hero-subtitle">Choose the payment method that works for you. Bank transfers, e-wallets, and digital assets—all in one clear, convenient hub.</p>
+          <div class="hero-highlights" aria-label="Available payment categories">
+            <span>Bank transfer</span>
+            <span>E-wallet</span>
+            <span>Digital assets</span>
+          </div>
         </div>
 
-    </div>
+        <div class="hero-art" aria-hidden="true">
+          <img class="hero-illustration" src="images/images_hero-illustration.svg" alt="">
+          <div class="hero-orb hero-orb-blue"></div>
+          <div class="hero-orb hero-orb-purple"></div>
+          <div class="hero-orb hero-orb-cyan"></div>
 
-</section>
+          <div class="visual-payment-card">
+            <div class="visual-card-top">
+              <span class="visual-mark"><i></i><i></i><i></i><i></i></span>
+              <svg class="visual-contactless" viewBox="0 0 24 24" fill="none">
+                <path d="M8.5 8.5a5 5 0 0 1 0 7M12 5a10 10 0 0 1 0 14M5 12h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span class="visual-card-label">PAYMENT HUB</span>
+            <strong>Pay your way.</strong>
+            <div class="visual-card-bottom">
+              <span>Bank transfer</span>
+              <span class="visual-card-chip"></span>
+            </div>
+          </div>
+
+          <div class="visual-qr-card">
+            <svg class="visual-qr" viewBox="0 0 64 64" fill="none">
+              <rect width="64" height="64" rx="8" fill="white"/>
+              <path fill="#111827" d="M7 7h18v18H7zM11 11v10h10V11H11zm26-4h18v18H37zM41 11v10h10V11H41zM7 37h18v18H7zM11 41v10h10V41H11zm21-30h5v5h-5zm-5 10h5v5h-5zm10 0h5v5h-5zm10 5h5v5h-5zM27 27h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zM27 37h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-15 5h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-15 5h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-20 5h5v5h-5zm10 0h5v5h-5z"/>
+            </svg>
+            <span>QR payments</span>
+          </div>
+
+          <div class="visual-status">
+            <span class="status-check">✓</span>
+            <span><strong>All in one place</strong><small>Simple. Secure. Ready.</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="search-panel container" role="search" aria-label="Search payment methods">
+      <div class="search-control">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/>
+          <path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <input id="payment-search" type="search" aria-label="Search bank names, bank codes, account numbers, and e-wallets" placeholder="Search bank, code, account, or wallet…" autocomplete="off">
+        <button id="clear-search" class="search-clear" type="button" aria-label="Clear search" hidden>×</button>
+      </div>
+    </section>
+    <p id="search-empty" class="search-empty container" role="status" hidden>No payment methods found. Try another name, bank code, or account number.</p>
 
     <section class="sections container">
+      <div id="favorites-section" class="section-block favorites-section" hidden>
+        <h3 class="section-title">★ Favorites</h3>
+        <div id="favorites-grid" class="grid cards-grid"></div>
+      </div>
+
       <!-- Bank Transfer -->
       <div class="section-block">
         <h3 class="section-title">🏦 Bank Transfer</h3>
@@ -59,16 +100,19 @@
       <!-- USDT -->
       <div class="section-block">
         <h3 class="section-title">💰 USDT (TRC20)</h3>
-        <div class="usdt-card card glass">
+        <div class="usdt-card card glass payment-card" data-payment-id="usdt:trc20" data-search="USDT TRC20 Wallet Address TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2">
           <div class="card-media">
-            <img src="images/ustd.jpg" alt="USDT (TRC20)" class="card-img qr-img" data-full="images/ustd.jpg">
+            <img src="images/ustd.jpg" alt="USDT (TRC20)" class="card-img qr-img payment-qr" data-provider="USDT (TRC20)" data-full="images/ustd.jpg">
           </div>
           <div class="card-body">
-            <h4 class="card-name">USDT (TRC20)</h4>
+            <div class="card-heading">
+              <h4 class="card-name">USDT (TRC20)</h4>
+              <button class="favorite-toggle" type="button" data-action="favorite" data-payment-id="usdt:trc20" aria-label="Add USDT (TRC20) to favorites" aria-pressed="false">★</button>
+            </div>
             <p class="muted">Wallet Address</p>
             <pre id="usdt-address" class="address">TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2</pre>
             <div class="card-actions">
-              <button class="btn ripple" id="copy-usdt">Copy Wallet Address</button>
+              <button class="btn ripple" id="copy-usdt" data-action="copy-usdt">Copy Wallet Address</button>
             </div>
           </div>
         </div>
@@ -88,10 +132,10 @@
   <!-- QR Modal -->
   <div id="qr-modal" class="modal" aria-hidden="true">
     <div class="modal-overlay" id="modal-overlay"></div>
-    <div class="modal-content" role="dialog" aria-modal="true">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-caption">
       <button id="modal-close" class="modal-close" aria-label="Close">✕</button>
       <img id="modal-img" src="" alt="QR full view">
-      <p id="modal-caption" class="muted"></p>
+      <p id="modal-caption" class="modal-caption"></p>
     </div>
   </div>
 

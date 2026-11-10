@@ -95,6 +95,41 @@ const usdtCard = copyUsdtBtn.closest(".usdt-card");
 const FAVORITES_STORAGE_KEY = "payment-hub-favorites";
 let favorites = new Set();
 let cardObserver;
+const PERSONAL_DATA_KEY = "payment-hub-personal-data-v1";
+const ADMIN_HASH_KEY = "payment-hub-admin-hash-v1";
+const ADMIN_SALT_KEY = "payment-hub-admin-salt-v1";
+let adminMode = false;
+let personalData = loadPersonalData();
+
+function loadPersonalData() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PERSONAL_DATA_KEY) || "null");
+    if (saved && Array.isArray(saved.banks) && Array.isArray(saved.ewallets)) {
+      return { banks: saved.banks, ewallets: saved.ewallets };
+    }
+  } catch (error) { console.warn("Personal payment data could not be loaded", error); }
+  return { banks: BANKS.map(item => ({ ...item })), ewallets: EWALLETS.map(item => ({ ...item })) };
+}
+function persistPersonalData() {
+  try {
+    localStorage.setItem(PERSONAL_DATA_KEY, JSON.stringify(personalData));
+    return true;
+  } catch (error) {
+    showToast("Storage is full. Use smaller QR images or export and remove older entries.");
+    return false;
+  }
+}
+function syncPaymentData() {
+  BANKS.splice(0, BANKS.length, ...personalData.banks);
+  EWALLETS.splice(0, EWALLETS.length, ...personalData.ewallets);
+  banksGrid.replaceChildren();
+  ewalletGrid.replaceChildren();
+  renderAll();
+  renderFavorites();
+  applySearch();
+  observeCards();
+}
+
 let modalCloseTimer;
 let previousModalFocus;
 
@@ -484,9 +519,199 @@ function headerFadeIn() {
   setTimeout(() => { heroSub.style.opacity = 1; heroSub.style.transform = "translateY(0)"; }, 540);
 }
 
+
+/* ---------- Personal admin mode ---------- */
+const adminToggle = document.getElementById("admin-toggle");
+const adminPanel = document.getElementById("admin-panel");
+const adminExit = document.getElementById("admin-exit");
+const editor = document.getElementById("payment-editor");
+const importFile = document.getElementById("import-file");
+const $ = id => document.getElementById(id);
+
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" }, key, 256);
+  return [...new Uint8Array(bits)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+function fromBase64(value) {
+  return Uint8Array.from(atob(value), char => char.charCodeAt(0));
+}
+function toBase64(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
+}
+async function requestAdminAccess() {
+  if (!window.crypto?.subtle) {
+    showToast("This browser does not support secure password hashing.");
+    return;
+  }
+  const hasPassword = localStorage.getItem(ADMIN_HASH_KEY);
+  if (!hasPassword) {
+    const first = prompt("Create your personal admin password (at least 8 characters):");
+    if (first === null) return;
+    if (first.length < 8) { showToast("Password must be at least 8 characters."); return; }
+    const confirmPassword = prompt("Enter the password again to confirm:");
+    if (first !== confirmPassword) { showToast("Passwords do not match."); return; }
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const hash = await hashPassword(first, salt);
+    localStorage.setItem(ADMIN_SALT_KEY, toBase64(salt));
+    localStorage.setItem(ADMIN_HASH_KEY, hash);
+  } else {
+    const password = prompt("Enter your personal admin password:");
+    if (password === null) return;
+    const salt = fromBase64(localStorage.getItem(ADMIN_SALT_KEY));
+    if (await hashPassword(password, salt) !== hasPassword) {
+      showToast("Incorrect password.");
+      return;
+    }
+  }
+  enterAdminMode();
+}
+function enterAdminMode() {
+  adminMode = true;
+  adminPanel.hidden = false;
+  adminToggle.textContent = "Admin Mode ✓";
+  renderAdminLists();
+  adminPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function exitAdminMode() {
+  adminMode = false;
+  adminPanel.hidden = true;
+  editor.hidden = true;
+  adminToggle.textContent = "Admin Mode";
+}
+function renderAdminLists() {
+  const renderList = (items, type, target) => {
+    target.replaceChildren();
+    items.forEach((item, index) => {
+      const label = type === "bank" ? `${item.name} · ${item.code} · ${item.account}` : item.name;
+      const row = createEl("div", { class: "admin-list-row" },
+        createEl("span", { class: "admin-item-label" }, label),
+        createEl("span", { class: "admin-item-actions" },
+          createEl("button", { class: "btn btn-secondary", type: "button", dataset: { adminAction: "edit", type, index } }, "Edit"),
+          createEl("button", { class: "btn btn-danger", type: "button", dataset: { adminAction: "delete", type, index } }, "Delete")
+        )
+      );
+      target.appendChild(row);
+    });
+    if (!items.length) target.appendChild(createEl("p", { class: "admin-note" }, "No entries yet."));
+  };
+  renderList(BANKS, "bank", $("admin-banks-list"));
+  renderList(EWALLETS, "wallet", $("admin-wallets-list"));
+}
+function openEditor(type, index = -1) {
+  editor.reset();
+  $("editor-type").value = type;
+  $("editor-original-id").value = index;
+  const isBank = type === "bank";
+  $("bank-code-wrap").hidden = !isBank;
+  $("bank-account-wrap").hidden = !isBank;
+  $("editor-title").textContent = `${index < 0 ? "Add" : "Edit"} ${isBank ? "bank" : "e-wallet"}`;
+  const item = index < 0 ? null : (isBank ? BANKS[index] : EWALLETS[index]);
+  $("editor-name").value = item?.name || "";
+  $("editor-code").value = item?.code || "";
+  $("editor-account").value = item?.account || "";
+  $("editor-image-status").textContent = item?.image ? "Current QR image will be retained unless you choose a new one." : "No QR image selected.";
+  editor.hidden = false;
+  editor.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve("");
+    if (!["image/jpeg", "image/png"].includes(file.type)) return reject(new Error("Only JPG and PNG images are supported."));
+    if (file.size > 1.5 * 1024 * 1024) return reject(new Error("Please use an image smaller than 1.5 MB."));
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read the image."));
+    reader.readAsDataURL(file);
+  });
+}
+adminToggle.addEventListener("click", () => adminMode ? exitAdminMode() : requestAdminAccess());
+adminExit.addEventListener("click", exitAdminMode);
+$("add-bank").addEventListener("click", () => openEditor("bank"));
+$("add-wallet").addEventListener("click", () => openEditor("wallet"));
+$("editor-cancel").addEventListener("click", () => { editor.hidden = true; });
+$("admin-banks-list").addEventListener("click", handleAdminListAction);
+$("admin-wallets-list").addEventListener("click", handleAdminListAction);
+function handleAdminListAction(event) {
+  const button = event.target.closest("button[data-admin-action]");
+  if (!button || !adminMode) return;
+  const { adminAction, type, index } = button.dataset;
+  const list = type === "bank" ? BANKS : EWALLETS;
+  const itemIndex = Number(index);
+  if (adminAction === "edit") openEditor(type, itemIndex);
+  if (adminAction === "delete") {
+    if (!confirm(`Delete "${list[itemIndex].name}"? This only changes this browser.`)) return;
+    list.splice(itemIndex, 1);
+    personalData = { banks: BANKS, ewallets: EWALLETS };
+    if (persistPersonalData()) { syncPaymentData(); renderAdminLists(); showToast("Payment method deleted."); }
+  }
+}
+editor.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!adminMode) return;
+  const type = $("editor-type").value;
+  const index = Number($("editor-original-id").value);
+  const isBank = type === "bank";
+  const name = $("editor-name").value.trim();
+  const code = $("editor-code").value.trim();
+  const account = $("editor-account").value.trim();
+  if (!name || (isBank && (!code || !account))) { showToast("Please complete the required fields."); return; }
+  try {
+    const list = isBank ? BANKS : EWALLETS;
+    const old = index < 0 ? {} : list[index];
+    const imageFile = $("editor-image").files[0];
+    const image = imageFile ? await readImageFile(imageFile) : (old.image || "");
+    const item = isBank
+      ? { name, code, account, image, hasQr: Boolean(image) }
+      : { name, image };
+    const duplicate = list.some((entry, i) => i !== index && (isBank ? entry.code === code : entry.name.toLocaleLowerCase() === name.toLocaleLowerCase()));
+    if (duplicate) { showToast(isBank ? "This bank code already exists." : "This e-wallet name already exists."); return; }
+    if (index < 0) list.push(item); else list[index] = item;
+    personalData = { banks: BANKS, ewallets: EWALLETS };
+    if (!persistPersonalData()) return;
+    editor.hidden = true;
+    syncPaymentData();
+    renderAdminLists();
+    showToast("Saved in this browser.");
+  } catch (error) { showToast(error.message || "Could not save this payment method."); }
+});
+$("export-data").addEventListener("click", () => {
+  const backup = {
+    format: "payment-hub-personal-backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    banks: BANKS,
+    ewallets: EWALLETS
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = createEl("a", { href: url, download: "payment-hub-backup.json" });
+  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  showToast("Backup exported.");
+});
+$("import-data").addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", async () => {
+  const file = importFile.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.format !== "payment-hub-personal-backup" || !Array.isArray(data.banks) || !Array.isArray(data.ewallets)) {
+      throw new Error("This file is not a valid Payment Hub backup.");
+    }
+    if (!confirm("Import this backup and replace the payment methods saved in this browser?")) return;
+    personalData = { banks: data.banks, ewallets: data.ewallets };
+    if (!persistPersonalData()) return;
+    syncPaymentData(); renderAdminLists(); showToast("Backup imported.");
+  } catch (error) { showToast(error.message || "Could not import backup."); }
+  finally { importFile.value = ""; }
+});
+
 /* ---------- Startup ---------- */
 document.addEventListener("DOMContentLoaded", () => {
   favorites = loadFavorites();
+  BANKS.splice(0, BANKS.length, ...personalData.banks);
+  EWALLETS.splice(0, EWALLETS.length, ...personalData.ewallets);
   renderAll();
   setupObservers();
   renderFavorites();

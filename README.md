@@ -1,16 +1,22 @@
 # Payment Hub
 
-A static payment methods website (HTML/CSS/Vanilla JS) ready to deploy on GitHub Pages.
+Static payment methods website (HTML/CSS/Vanilla JS) for GitHub Pages.
 
-Features
-- Dark glassmorphism theme with responsive layouts and reduced-motion support
-- Bank transfer cards for 9 banks, e-wallet QR cards, and USDT (TRC20)
-- Search by bank name, code, account number, or e-wallet name
-- Favorites saved in browser `localStorage`
-- Fullscreen QR viewer for actual payment QR images (ESC or backdrop to close)
-- Copy bank accounts, bank codes, combined bank details, e-wallet names, and the USDT wallet address
-- Toast feedback, subtle animations, and Vanilla HTML/CSS/JavaScript (no frameworks or backend)
+## Features
+- Responsive dark glassmorphism theme and animated hero
+- Bank transfer cards, e-wallet QR cards, and USDT (TRC20)
+- Search and favorites (browser localStorage)
+- Fullscreen QR viewer and copy actions
+- Personal Admin Mode: create, edit, and delete banks / e-wallets
+- Upload JPG / PNG QR images (up to 1.5 MB per image)
+- Export / import personal payment data as a JSON backup
 
-Payment images use relative paths from `index.html` so the static site can be hosted on GitHub Pages.
+## Personal data and privacy
+Admin changes are stored in the current browser only. They do not modify the published source files and do not affect other visitors or devices. To move data to another browser, export a backup and import it there. Clearing this browser's site data may remove the personal records, so keep a backup.
 
-Project structure
+The first time Admin Mode is opened, create a password of at least 8 characters. A PBKDF2-SHA-256 hash and random salt are stored in this browser; the password itself is not stored. This is only a client-side access barrier. GitHub Pages is a static host and has no server-side authentication, so this must not be treated as strong security against someone with access to the browser or its developer tools.
+
+QR image data is stored locally in browser storage. Keep image files reasonably small; if browser storage becomes full, reduce image sizes and export a backup.
+
+## Deploy
+Upload `index.html`, `style.css`, `script.js`, `README.md`, and the `images/` folder to the GitHub repository root, then commit and push. GitHub Pages will publish the updated static site.

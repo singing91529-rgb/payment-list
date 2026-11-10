@@ -13,6 +13,7 @@
         <h1 class="site-title">Payment Hub</h1>
         <p class="site-subtitle">Choose Your Payment Method</p>
       </div>
+      <button id="admin-toggle" class="btn admin-toggle" type="button">Admin Mode</button>
     </div>
   </header>
 
@@ -125,6 +126,48 @@
       <p>© 2026 Payment Hub</p>
     </div>
   </footer>
+
+  <!-- Personal admin workspace -->
+  <section id="admin-panel" class="admin-panel" hidden aria-labelledby="admin-title">
+    <div class="admin-panel-inner">
+      <div class="admin-heading">
+        <div>
+          <p class="admin-kicker">PERSONAL WORKSPACE</p>
+          <h2 id="admin-title">Payment management</h2>
+          <p class="admin-note">Changes are saved only in this browser and do not affect other visitors.</p>
+        </div>
+        <button id="admin-exit" class="btn btn-secondary" type="button">Exit Admin</button>
+      </div>
+      <div class="admin-toolbar">
+        <button id="add-bank" class="btn" type="button">＋ Add bank</button>
+        <button id="add-wallet" class="btn" type="button">＋ Add e-wallet</button>
+        <button id="export-data" class="btn btn-secondary" type="button">Export backup</button>
+        <button id="import-data" class="btn btn-secondary" type="button">Import backup</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <form id="payment-editor" class="payment-editor" hidden>
+        <h3 id="editor-title">Add payment method</h3>
+        <input id="editor-type" type="hidden">
+        <input id="editor-original-id" type="hidden">
+        <div class="editor-fields">
+          <label>Display name<input id="editor-name" required maxlength="60" autocomplete="off"></label>
+          <label id="bank-code-wrap">Bank code<input id="editor-code" maxlength="12" inputmode="numeric" autocomplete="off"></label>
+          <label id="bank-account-wrap">Account number<input id="editor-account" maxlength="50" autocomplete="off"></label>
+          <label class="upload-label">QR image (JPG / PNG)<input id="editor-image" type="file" accept="image/jpeg,image/png"></label>
+        </div>
+        <p id="editor-image-status" class="admin-note">No new image selected. Existing QR image will be retained when editing.</p>
+        <div class="editor-actions">
+          <button class="btn" type="submit">Save payment method</button>
+          <button id="editor-cancel" class="btn btn-secondary" type="button">Cancel</button>
+        </div>
+      </form>
+      <div class="admin-lists">
+        <div><h3>Banks</h3><div id="admin-banks-list" class="admin-list"></div></div>
+        <div><h3>E-wallets</h3><div id="admin-wallets-list" class="admin-list"></div></div>
+      </div>
+      <p class="admin-security">Security note: the password is verified in this browser only. This static GitHub Pages site has no server-side authentication; this is a personal-use access barrier, not protection against someone who can inspect or modify browser data.</p>
+    </div>
+  </section>
 
   <!-- Toast -->
   <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>

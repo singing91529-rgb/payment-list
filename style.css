@@ -908,3 +908,119 @@ a { color: inherit; text-decoration: none; }
 :root[data-theme="light"] #live-date,
 :root[data-theme="light"] #live-time { color:#24324b !important; }
 :root[data-theme="light"] .live-clock-zone { color:#40516d !important; background:rgba(40,60,100,.08); }
+
+
+/* Bank logo refresh: local transparent artwork beside bank name */
+.bank-name-brand {
+  display:flex;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:8px;
+  min-width:0;
+  flex:1 1 auto;
+}
+.bank-name-brand .card-name {
+  min-width:0;
+  overflow-wrap:anywhere;
+  line-height:1.25;
+}
+.bank-name-brand .bank-brand-wrap {
+  display:inline-flex;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:center;
+  width:auto;
+  max-width:48px;
+  height:26px;
+  overflow:visible;
+}
+.bank-name-brand .bank-brand-logo {
+  display:block;
+  width:auto !important;
+  height:auto !important;
+  max-width:46px !important;
+  max-height:24px !important;
+  object-fit:contain;
+  object-position:center;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  mix-blend-mode:normal;
+}
+.bank-name-brand .bank-brand-fallback {
+  display:none;
+}
+.card-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-width:0;
+}
+.card-heading .favorite-toggle {
+  flex:0 0 32px;
+}
+@media (max-width: 600px) {
+  .payment-card {
+    gap:12px;
+    padding:12px;
+    align-items:flex-start;
+  }
+  .payment-card .card-media {
+    flex:0 0 88px;
+    width:88px;
+    min-width:88px;
+    height:88px;
+    border-radius:11px;
+  }
+  .payment-card .card-body {
+    min-width:0;
+    gap:7px;
+  }
+  .bank-name-brand {
+    gap:6px;
+  }
+  .bank-name-brand .card-name {
+    font-size:15px;
+  }
+  .bank-name-brand .bank-brand-wrap {
+    max-width:38px;
+    height:22px;
+  }
+  .bank-name-brand .bank-brand-logo {
+    max-width:36px !important;
+    max-height:20px !important;
+  }
+  .payment-card .meta {
+    gap:5px;
+    font-size:11px;
+  }
+  .payment-card .address {
+    padding:7px 8px;
+    font-size:11px;
+    overflow-wrap:anywhere;
+  }
+  .payment-card .card-actions {
+    gap:6px;
+  }
+  .payment-card .card-actions .btn {
+    min-width:0;
+    padding:7px 8px;
+    font-size:11px;
+  }
+}
+@media (max-width: 380px) {
+  .payment-card .card-media {
+    flex-basis:76px;
+    width:76px;
+    min-width:76px;
+    height:76px;
+  }
+  .bank-name-brand .card-name { font-size:14px; }
+  .bank-name-brand .bank-brand-logo {
+    max-width:32px !important;
+    max-height:18px !important;
+  }
+}

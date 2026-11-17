@@ -75,14 +75,15 @@ const EWALLETS = [
 
 let USDT_ADDRESS = "TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2";
 const BANK_LOGOS = {
-  "013": "https://static01-ipass.cdn.hinet.net/ipassweb/iPassWebV2/Images/Card/Bank500/bank-500-24.png",
-  "822": "https://unitednpl.com/storage/2025/12/CTBC-Bank.png",
-  "812": "https://prod-s3.pxpayplus.com/MKT_Event/Event_Img/Partner_Logo/Partner_TaishinBank.png",
-  "103": "https://cdn.brandfetch.io/idsW5ztmfi/w/2048/h/2048/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1760344175612",
-  "808": "https://www.asifma.org/wp-content/uploads/2024/07/esun.png",
-  "807": "https://www.temenos.com/wp-content/uploads/2019/06/client-sinopac-square-image-19-jun-27.jpg",
-  "700": "https://taipei2026.post.gov.tw/taipei2026/en/images/index-2-04.png",
-  "004": "https://color-matching.s3.ap-northeast-1.amazonaws.com/color-image/%E8%87%BA%E7%81%A3%E9%8A%80%E8%A1%8C%EF%BC%8C%E6%A8%99%E8%AA%8C%EF%BC%9A%EF%BC%91.jpg"
+  "013": "images/bank-logos/cathay-logo.png",
+  "822": "images/bank-logos/ctbc-logo.png",
+  "812": "images/bank-logos/taishin-logo.png",
+  "103": "images/bank-logos/skbank-logo.png",
+  "808": "images/bank-logos/esun-logo.png",
+  "807": "images/bank-logos/sinopac-logo.png",
+  "700": "images/bank-logos/post-logo.png",
+  "004": "images/bank-logos/bot-logo.png",
+  "826": "images/bank-logos/rakuten-logo.png"
 };
 
 

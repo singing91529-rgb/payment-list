@@ -48,3 +48,10 @@ Click Admin Mode and enter the email/password of the Supabase Auth user whose UI
 
 ### Shared data behavior
 Payment method creation, editing, deletion, and visibility changes are written to Supabase and are shared by all visitors. Theme preference and favorites remain browser-local. The QR upload control accepts JPG/PNG up to 1.5 MB.
+
+
+## Bank logos and responsive card layout
+- Bank logo assets are stored locally in `images/bank-logos/` as transparent PNG files.
+- Logos are displayed beside each bank name, not below the QR code.
+- Logo paths are local to the GitHub Pages site; no third-party image host is required.
+- Mobile card layout reduces QR and logo sizes while preserving account/action readability.

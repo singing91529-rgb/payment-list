@@ -98,6 +98,8 @@ let cardObserver;
 const PERSONAL_DATA_KEY = "payment-hub-personal-data-v1";
 const ADMIN_HASH_KEY = "payment-hub-admin-hash-v1";
 const ADMIN_SALT_KEY = "payment-hub-admin-salt-v1";
+const HISTORY_KEY = "payment-hub-admin-history-v1";
+const THEME_KEY = "payment-hub-theme-v1";
 let adminMode = false;
 let personalData = loadPersonalData();
 
@@ -279,6 +281,7 @@ function makeBankCard(bank) {
   // body
   const body = createEl("div", { class: "card-body" });
   const heading = createEl("div", { class: "card-heading" },
+    createEl("span", { class: "bank-brand-mark", "aria-hidden": "true" }, bank.logoText || bank.name.replace(/銀行|世華/g, "").slice(0, 2)),
     createEl("h4", { class: "card-name" }, bank.name),
     makeFavoriteButton(paymentId, bank.name)
   );
@@ -359,11 +362,11 @@ function makeEwalletCard(ew) {
 /* ---------- Initial render ---------- */
 function renderAll() {
   // banks
-  BANKS.forEach(b => {
+  BANKS.filter(b => !b.hidden).forEach(b => {
     banksGrid.appendChild(makeBankCard(b));
   });
   // ewallets
-  EWALLETS.forEach(w => {
+  EWALLETS.filter(w => !w.hidden).forEach(w => {
     ewalletGrid.appendChild(makeEwalletCard(w));
   });
   // USDT address
@@ -376,8 +379,8 @@ function normalizeSearch(value) {
 
 function renderFavorites() {
   const cards = [];
-  BANKS.filter(bank => favorites.has(`bank:${bank.code}`)).forEach(bank => cards.push(makeBankCard(bank)));
-  EWALLETS.filter(wallet => favorites.has(`ewallet:${wallet.name}`)).forEach(wallet => cards.push(makeEwalletCard(wallet)));
+  BANKS.filter(bank => !bank.hidden && favorites.has(`bank:${bank.code}`)).forEach(bank => cards.push(makeBankCard(bank)));
+  EWALLETS.filter(wallet => !wallet.hidden && favorites.has(`ewallet:${wallet.name}`)).forEach(wallet => cards.push(makeEwalletCard(wallet)));
   if (favorites.has("usdt:trc20")) {
     const usdtFavoriteCard = usdtCard.cloneNode(true);
     usdtFavoriteCard.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
@@ -433,6 +436,7 @@ function toggleFavorite(paymentId) {
     button.setAttribute("aria-label", `${isFavorite ? "Remove" : "Add"} ${name} ${isFavorite ? "from" : "to"} favorites`);
   });
   renderFavorites();
+  animateOverview();
   showToast(favorites.has(paymentId) ? `${name} added to favorites` : `${name} removed from favorites`);
 }
 
@@ -584,10 +588,11 @@ function renderAdminLists() {
   const renderList = (items, type, target) => {
     target.replaceChildren();
     items.forEach((item, index) => {
-      const label = type === "bank" ? `${item.name} · ${item.code} · ${item.account}` : item.name;
+      const label = `${type === "bank" ? `${item.name} · ${item.code} · ${item.account}` : item.name}${item.hidden ? " · 已隱藏" : ""}`;
       const row = createEl("div", { class: "admin-list-row" },
         createEl("span", { class: "admin-item-label" }, label),
         createEl("span", { class: "admin-item-actions" },
+          createEl("button", { class: "btn btn-secondary", type: "button", dataset: { adminAction: "toggle-hidden", type, index } }, item.hidden ? "Show" : "Hide"),
           createEl("button", { class: "btn btn-secondary", type: "button", dataset: { adminAction: "edit", type, index } }, "Edit"),
           createEl("button", { class: "btn btn-danger", type: "button", dataset: { adminAction: "delete", type, index } }, "Delete")
         )
@@ -640,11 +645,21 @@ function handleAdminListAction(event) {
   const list = type === "bank" ? BANKS : EWALLETS;
   const itemIndex = Number(index);
   if (adminAction === "edit") openEditor(type, itemIndex);
+  if (adminAction === "toggle-hidden") {
+    list[itemIndex].hidden = !list[itemIndex].hidden;
+    personalData = { banks: BANKS, ewallets: EWALLETS };
+    if (persistPersonalData()) {
+      recordActivity(list[itemIndex].hidden ? "暫時隱藏" : "重新顯示", list[itemIndex].name);
+      syncPaymentData(); renderAdminLists(); animateOverview();
+      showToast(list[itemIndex].hidden ? "已從首頁隱藏。" : "已重新顯示。");
+    }
+  }
   if (adminAction === "delete") {
     if (!confirm(`Delete "${list[itemIndex].name}"? This only changes this browser.`)) return;
+    const removedName = list[itemIndex].name;
     list.splice(itemIndex, 1);
     personalData = { banks: BANKS, ewallets: EWALLETS };
-    if (persistPersonalData()) { syncPaymentData(); renderAdminLists(); showToast("Payment method deleted."); }
+    if (persistPersonalData()) { recordActivity("刪除", removedName); syncPaymentData(); renderAdminLists(); animateOverview(); showToast("Payment method deleted."); }
   }
 }
 editor.addEventListener("submit", async event => {
@@ -667,12 +682,14 @@ editor.addEventListener("submit", async event => {
       : { name, image };
     const duplicate = list.some((entry, i) => i !== index && (isBank ? entry.code === code : entry.name.toLocaleLowerCase() === name.toLocaleLowerCase()));
     if (duplicate) { showToast(isBank ? "This bank code already exists." : "This e-wallet name already exists."); return; }
-    if (index < 0) list.push(item); else list[index] = item;
+    if (index < 0) list.push(item); else list[index] = { ...item, hidden: old.hidden || false };
     personalData = { banks: BANKS, ewallets: EWALLETS };
     if (!persistPersonalData()) return;
     editor.hidden = true;
+    recordActivity(index < 0 ? "新增" : "編輯", name);
     syncPaymentData();
     renderAdminLists();
+    animateOverview();
     showToast("Saved in this browser.");
   } catch (error) { showToast(error.message || "Could not save this payment method."); }
 });
@@ -702,7 +719,7 @@ importFile.addEventListener("change", async () => {
     if (!confirm("Import this backup and replace the payment methods saved in this browser?")) return;
     personalData = { banks: data.banks, ewallets: data.ewallets };
     if (!persistPersonalData()) return;
-    syncPaymentData(); renderAdminLists(); showToast("Backup imported.");
+    recordActivity("匯入備份", "付款資料"); syncPaymentData(); renderAdminLists(); animateOverview(); showToast("Backup imported.");
   } catch (error) { showToast(error.message || "Could not import backup."); }
   finally { importFile.value = ""; }
 });
@@ -731,9 +748,17 @@ function startLiveClock() {
   window.setInterval(update, 1000);
 }
 
+document.getElementById("clear-history")?.addEventListener("click", () => {
+  if (confirm("確定清除所有操作歷史？")) {
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistory();
+  }
+});
+
 /* ---------- Startup ---------- ---------- */
 document.addEventListener("DOMContentLoaded", () => {
   startLiveClock();
+  initTheme();
   favorites = loadFavorites();
   BANKS.splice(0, BANKS.length, ...personalData.banks);
   EWALLETS.splice(0, EWALLETS.length, ...personalData.ewallets);
@@ -741,5 +766,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupObservers();
   renderFavorites();
   applySearch();
+  renderHistory();
+  animateOverview();
   headerFadeIn();
 });

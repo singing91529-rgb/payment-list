@@ -20,11 +20,19 @@
           <span class="live-clock-zone">台灣時間</span>
         </div>
       </div>
-      <button id="admin-toggle" class="btn admin-toggle" type="button">Admin Mode</button>
+      <div class="header-tools">
+        <button id="theme-toggle" class="btn btn-secondary theme-toggle" type="button" aria-label="Switch color theme">☀ 淺色</button>
+        <button id="admin-toggle" class="btn admin-toggle" type="button">Admin Mode</button>
+      </div>
     </div>
   </header>
 
   <main>
+    <section class="overview-strip container" aria-label="Payment overview">
+      <div class="overview-card"><span>銀行帳戶</span><strong data-count="bank-count">0</strong><small>Bank accounts</small></div>
+      <div class="overview-card"><span>電子支付</span><strong data-count="wallet-count">0</strong><small>E-wallets</small></div>
+      <div class="overview-card"><span>收藏項目</span><strong data-count="favorite-count">0</strong><small>Favorites</small></div>
+    </section>
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-inner container">
         <div class="hero-copy">
@@ -168,6 +176,10 @@
           <button id="editor-cancel" class="btn btn-secondary" type="button">Cancel</button>
         </div>
       </form>
+      <section class="admin-history">
+        <div class="history-heading"><h3>操作歷史</h3><button id="clear-history" class="btn btn-secondary" type="button">清除紀錄</button></div>
+        <div id="admin-history-list" class="history-list"></div>
+      </section>
       <div class="admin-lists">
         <div><h3>Banks</h3><div id="admin-banks-list" class="admin-list"></div></div>
         <div><h3>E-wallets</h3><div id="admin-wallets-list" class="admin-list"></div></div>

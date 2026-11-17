@@ -20,3 +20,13 @@ QR image data is stored locally in browser storage. Keep image files reasonably 
 
 ## Deploy
 Upload `index.html`, `style.css`, `script.js`, `README.md`, and the `images/` folder to the GitHub repository root, then commit and push. GitHub Pages will publish the updated static site.
+
+## Phase 4 enhancements
+- Dark / light appearance toggle (saved per browser)
+- Payment overview counters with count-up animation
+- Bank monogram identity marks (generated from each bank name; not official trademark artwork)
+- Admin operation history (last 50 local actions)
+- Hide / show payment methods without deleting them
+- Refined gradients, soft glows, and hover interactions
+
+Operation history and theme preferences are stored locally in the current browser. Hidden payment methods remain in personal data and can be shown again from Admin Mode.

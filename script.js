@@ -74,6 +74,17 @@ const EWALLETS = [
 ];
 
 let USDT_ADDRESS = "TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2";
+const BANK_LOGOS = {
+  "013": "https://static01-ipass.cdn.hinet.net/ipassweb/iPassWebV2/Images/Card/Bank500/bank-500-24.png",
+  "822": "https://unitednpl.com/storage/2025/12/CTBC-Bank.png",
+  "812": "https://prod-s3.pxpayplus.com/MKT_Event/Event_Img/Partner_Logo/Partner_TaishinBank.png",
+  "103": "https://cdn.brandfetch.io/idsW5ztmfi/w/2048/h/2048/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1760344175612",
+  "808": "https://www.asifma.org/wp-content/uploads/2024/07/esun.png",
+  "807": "https://www.temenos.com/wp-content/uploads/2019/06/client-sinopac-square-image-19-jun-27.jpg",
+  "700": "https://taipei2026.post.gov.tw/taipei2026/en/images/index-2-04.png",
+  "004": "https://color-matching.s3.ap-northeast-1.amazonaws.com/color-image/%E8%87%BA%E7%81%A3%E9%8A%80%E8%A1%8C%EF%BC%8C%E6%A8%99%E8%AA%8C%EF%BC%9A%EF%BC%91.jpg"
+};
+
 
 /* ---------- DOM references ---------- */
 const banksGrid = document.getElementById("banks-grid");
@@ -107,7 +118,16 @@ function loadPersonalData() {
   try {
     const saved = JSON.parse(localStorage.getItem(PERSONAL_DATA_KEY) || "null");
     if (saved && Array.isArray(saved.banks) && Array.isArray(saved.ewallets)) {
-      return { banks: saved.banks, ewallets: saved.ewallets };
+      // A previously saved empty dataset can result from an interrupted older build.
+      // Restore defaults instead of rendering an empty payment hub.
+      if (saved.banks.length === 0 && saved.ewallets.length === 0) {
+        localStorage.removeItem(PERSONAL_DATA_KEY);
+        return { banks: BANKS.map(item => ({ ...item })), ewallets: EWALLETS.map(item => ({ ...item })) };
+      }
+      return {
+        banks: saved.banks.length ? saved.banks : BANKS.map(item => ({ ...item })),
+        ewallets: saved.ewallets.length ? saved.ewallets : EWALLETS.map(item => ({ ...item }))
+      };
     }
   } catch (error) { console.warn("Personal payment data could not be loaded", error); }
   return { banks: BANKS.map(item => ({ ...item })), ewallets: EWALLETS.map(item => ({ ...item })) };
@@ -259,8 +279,8 @@ function makeBankCard(bank) {
     dataset: { paymentId, search: `${bank.name} ${bank.code} ${bank.account}` }
   });
 
-  // media area (QR or placeholder)
-  const media = createEl("div", { class: "card-media center" });
+  // QR code and compact bank brand mark are stacked vertically.
+  const media = createEl("div", { class: "card-media center bank-media" });
   if (bank.hasQr && bank.image) {
     const img = createEl("img", {
       class: "card-img qr-img payment-qr",
@@ -278,10 +298,28 @@ function makeBankCard(bank) {
     media.appendChild(coming);
   }
 
+  const logoUrl = BANK_LOGOS[bank.code];
+  const brand = createEl("span", { class: "bank-brand-wrap", title: `${bank.name} 品牌標誌` });
+  const fallback = createEl("span", { class: `bank-brand-fallback${logoUrl ? " is-loading" : ""}` },
+    bank.code === "826" ? "Rakuten" : bank.name.replace(/銀行|世華/g, "").slice(0, 3)
+  );
+  if (logoUrl) {
+    const logo = createEl("img", {
+      class: "bank-brand-logo",
+      src: logoUrl,
+      alt: `${bank.name} 品牌標誌`,
+      loading: "lazy"
+    });
+    logo.addEventListener("load", () => fallback.remove());
+    logo.addEventListener("error", () => { logo.remove(); fallback.classList.remove("is-loading"); });
+    brand.appendChild(logo);
+  }
+  brand.appendChild(fallback);
+  media.appendChild(brand);
+
   // body
   const body = createEl("div", { class: "card-body" });
   const heading = createEl("div", { class: "card-heading" },
-    createEl("span", { class: "bank-brand-mark", "aria-hidden": "true" }, bank.logoText || bank.name.replace(/銀行|世華/g, "").slice(0, 2)),
     createEl("h4", { class: "card-name" }, bank.name),
     makeFavoriteButton(paymentId, bank.name)
   );
@@ -523,6 +561,84 @@ function headerFadeIn() {
   setTimeout(() => { heroSub.style.opacity = 1; heroSub.style.transform = "translateY(0)"; }, 540);
 }
 
+
+/* ---------- Theme, activity history and dashboard helpers ---------- */
+function loadHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return Array.isArray(value) ? value.slice(0, 50) : [];
+  } catch { return []; }
+}
+function recordActivity(action, item) {
+  try {
+    const history = loadHistory();
+    history.unshift({ action, item, at: new Date().toISOString() });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+    renderHistory();
+  } catch (error) { console.warn("Could not save activity history", error); }
+}
+function renderHistory() {
+  const target = document.getElementById("admin-history-list");
+  if (!target) return;
+  target.replaceChildren();
+  const history = loadHistory();
+  if (!history.length) {
+    target.appendChild(createEl("p", { class: "admin-note" }, "尚無操作紀錄"));
+    return;
+  }
+  history.forEach(entry => {
+    const dateText = new Intl.DateTimeFormat("zh-TW", {
+      timeZone: "Asia/Taipei", dateStyle: "medium", timeStyle: "short"
+    }).format(new Date(entry.at));
+    target.appendChild(createEl("div", { class: "history-row" },
+      createEl("span", { class: "history-dot" }),
+      createEl("div", { class: "history-copy" },
+        createEl("strong", {}, `${entry.action}：${entry.item}`),
+        createEl("small", {}, dateText)
+      )
+    ));
+  });
+}
+function applyTheme(theme) {
+  const selected = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selected;
+  try { localStorage.setItem(THEME_KEY, selected); } catch {}
+  const button = document.getElementById("theme-toggle");
+  if (button) button.textContent = selected === "dark" ? "☀ 淺色" : "☾ 深色";
+}
+function initTheme() {
+  let saved = "dark";
+  try { saved = localStorage.getItem(THEME_KEY) || "dark"; } catch {}
+  applyTheme(saved);
+  document.getElementById("theme-toggle")?.addEventListener("click", () => {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  });
+}
+function animateOverview() {
+  const counts = {
+    "bank-count": BANKS.filter(item => !item.hidden).length,
+    "wallet-count": EWALLETS.filter(item => !item.hidden).length,
+    "favorite-count": favorites.size
+  };
+  Object.entries(counts).forEach(([key, target]) => {
+    const node = document.querySelector(`[data-count="${key}"]`);
+    if (!node) return;
+    const start = performance.now();
+    const duration = 650;
+    const frame = now => {
+      const progress = Math.min(1, (now - start) / duration);
+      node.textContent = String(Math.round(target * (1 - Math.pow(1 - progress, 3))));
+      if (progress < 1) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+}
+document.getElementById("clear-history")?.addEventListener("click", () => {
+  if (confirm("確定清除所有操作歷史？")) {
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+    renderHistory();
+  }
+});
 
 /* ---------- Personal admin mode ---------- */
 const adminToggle = document.getElementById("admin-toggle");

@@ -30,3 +30,6 @@ Upload `index.html`, `style.css`, `script.js`, `README.md`, and the `images/` fo
 - Refined gradients, soft glows, and hover interactions
 
 Operation history and theme preferences are stored locally in the current browser. Hidden payment methods remain in personal data and can be shown again from Admin Mode.
+
+## Bank logo placement
+Bank brand marks are displayed as compact icons beneath the QR image, not beside the account name. The logo is constrained to a maximum of 42×17 CSS pixels (smaller than the QR code).

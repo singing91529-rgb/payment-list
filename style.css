@@ -895,78 +895,16 @@ a { color: inherit; text-decoration: none; }
 }
 
 
-/* Bank brand marks: compact and placed directly beneath each QR image */
-.card-media.bank-media {
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  gap:5px;
-  padding:7px 6px;
-  overflow:hidden;
-}
-.bank-media .qr-img,
-.bank-media .card-img {
-  display:block;
-  width:82px;
-  height:82px;
-  max-width:100%;
-  flex:0 0 82px;
-  object-fit:contain;
-  border-radius:7px;
-  background:#fff;
-}
-.bank-brand-wrap {
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex:0 0 19px;
-  width:100%;
-  max-width:62px;
-  height:19px;
-  overflow:hidden;
-}
-.bank-brand-logo {
-  display:block;
-  width:auto !important;
-  height:auto !important;
-  max-width:42px !important;
-  max-height:17px !important;
-  object-fit:contain;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent;
-  box-shadow:none;
-}
-.bank-brand-fallback {
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  max-width:100%;
-  color:var(--muted);
-  font-size:9px;
-  font-weight:750;
-  line-height:1;
-  letter-spacing:.02em;
-  white-space:nowrap;
-}
-.bank-brand-fallback.is-loading { opacity:.0; }
-:root[data-theme="dark"] .bank-brand-logo {
-  /* Most official bank marks are supplied on transparent or white artwork;
-     the small neutral chip prevents any white canvas from dominating the QR. */
-  padding:1px 4px;
-  max-height:16px !important;
-  border-radius:4px;
-  background:rgba(255,255,255,.9);
-}
-:root[data-theme="light"] .bank-brand-logo {
-  mix-blend-mode:multiply;
-  filter:drop-shadow(0 1px 1px rgba(20,30,50,.06));
-}
-.card-heading .card-name { flex:1; min-width:0; }
-@media(max-width:520px) {
-  .card-media.bank-media { width:112px; height:112px; }
-  .bank-media .qr-img,.bank-media .card-img { width:80px; height:80px; flex-basis:80px; }
-  .bank-brand-logo { max-width:38px !important; max-height:15px !important; }
-}
+/* Shared-cloud integration: compact brand logo beside the bank name */
+.bank-name-brand { display:flex; align-items:center; gap:9px; min-width:0; flex:1; }
+.bank-name-brand .card-name { margin:0; }
+.bank-name-brand .bank-brand-wrap { display:inline-flex; align-items:center; justify-content:flex-start; width:auto; max-width:48px; height:22px; flex:0 0 auto; overflow:hidden; }
+.bank-name-brand .bank-brand-logo { display:block; width:auto !important; height:auto !important; max-width:42px !important; max-height:20px !important; object-fit:contain; padding:0; border:0; background:transparent; box-shadow:none; }
+.bank-name-brand .bank-brand-fallback { font-size:9px; }
+:root[data-theme="dark"] .live-clock,
+:root[data-theme="dark"] #live-date,
+:root[data-theme="dark"] #live-time { color:#e9efff !important; }
+:root[data-theme="light"] .live-clock,
+:root[data-theme="light"] #live-date,
+:root[data-theme="light"] #live-time { color:#24324b !important; }
+:root[data-theme="light"] .live-clock-zone { color:#40516d !important; background:rgba(40,60,100,.08); }

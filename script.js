@@ -86,6 +86,168 @@ const BANK_LOGOS = {
 };
 
 
+
+/* ---------- Supabase shared backend ---------- */
+const SUPABASE_URL = "https://jqcjtsphjcfbavnhhzqs.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_BUq_xoEIICw9JZWvBZWQOw_ymilaMa4";
+const SUPABASE_SESSION_KEY = "payment-hub-supabase-session-v1";
+let supabaseSession = null;
+let cloudReady = false;
+
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SUPABASE_SESSION_KEY) || "null"); }
+  catch { return null; }
+}
+function setSession(session) {
+  supabaseSession = session;
+  if (session) {
+    if (!session.expires_at && session.expires_in) session.expires_at = Math.floor(Date.now() / 1000) + session.expires_in;
+    localStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(session));
+  }
+  else localStorage.removeItem(SUPABASE_SESSION_KEY);
+}
+async function sbRequest(path, options = {}, authenticated = false) {
+  const headers = {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${authenticated && supabaseSession?.access_token ? supabaseSession.access_token : SUPABASE_PUBLISHABLE_KEY}`,
+    ...(options.headers || {})
+  };
+  const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
+  const raw = await response.text();
+  let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+  if (!response.ok) throw new Error(data?.message || data?.msg || data?.error_description || `Supabase request failed (${response.status})`);
+  return data;
+}
+async function refreshSupabaseSession() {
+  if (!supabaseSession?.refresh_token) return false;
+  try {
+    const refreshed = await sbRequest("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: supabaseSession.refresh_token })
+    });
+    setSession(refreshed);
+    return true;
+  } catch { setSession(null); return false; }
+}
+async function ensureSessionFresh() {
+  if (!supabaseSession) return false;
+  if (supabaseSession.expires_at && Date.now() / 1000 < supabaseSession.expires_at - 60) return true;
+  return refreshSupabaseSession();
+}
+function publicStorageUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${SUPABASE_URL}/storage/v1/object/public/payment-qr/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+function rowToPayment(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.bank_code || "",
+    account: row.account_number || "",
+    image: publicStorageUrl(row.qr_image_path),
+    qrPath: row.qr_image_path || "",
+    hasQr: Boolean(row.qr_image_path),
+    hidden: !row.is_visible,
+    sortOrder: row.sort_order || 0
+  };
+}
+async function loadCloudPayments() {
+  const authed = await ensureSessionFresh();
+  const query = authed
+    ? "select=*&order=sort_order.asc,created_at.asc"
+    : "select=*&is_visible=eq.true&order=sort_order.asc,created_at.asc";
+  const rows = await sbRequest(`/rest/v1/payment_methods?${query}`, {}, authed);
+  const banks = rows.filter(row => row.type === "bank").map(rowToPayment);
+  const wallets = rows.filter(row => row.type === "wallet").map(rowToPayment);
+  personalData = { banks, ewallets: wallets };
+  BANKS.splice(0, BANKS.length, ...banks);
+  EWALLETS.splice(0, EWALLETS.length, ...wallets);
+  cloudReady = true;
+  renderCloudData();
+}
+function renderCloudData() {
+  banksGrid.replaceChildren();
+  ewalletGrid.replaceChildren();
+  renderAll();
+  renderFavorites();
+  applySearch();
+  observeCards();
+  animateOverview();
+  if (adminMode) renderAdminLists();
+}
+async function uploadQrImage(file, oldPath = "") {
+  if (!file) return oldPath;
+  if (!["image/jpeg", "image/png"].includes(file.type)) throw new Error("QR 圖片只支援 JPG 或 PNG。");
+  if (file.size > 1.5 * 1024 * 1024) throw new Error("圖片請小於 1.5 MB。");
+  const ext = file.type === "image/png" ? "png" : "jpg";
+  const safeBase = (file.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || `qr-${Date.now()}`);
+  const path = `${safeBase}-${Date.now()}.${ext}`;
+  await sbRequest(`/storage/v1/object/payment-qr/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type, "x-upsert": "true" },
+    body: file
+  }, true);
+  return path;
+}
+async function saveCloudPayment(type, index, fields, file) {
+  const list = type === "bank" ? BANKS : EWALLETS;
+  const old = index < 0 ? null : list[index];
+  const qrPath = await uploadQrImage(file, old?.qrPath || "");
+  const payload = {
+    name: fields.name,
+    type,
+    bank_code: type === "bank" ? fields.code : null,
+    account_number: type === "bank" ? fields.account : null,
+    qr_image_path: qrPath || null,
+    is_visible: old ? !old.hidden : true,
+    sort_order: old?.sortOrder || (list.length + 1) * 10
+  };
+  if (old?.id) {
+    await sbRequest(`/rest/v1/payment_methods?id=eq.${encodeURIComponent(old.id)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify(payload)
+    }, true);
+  } else {
+    await sbRequest("/rest/v1/payment_methods", {
+      method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify(payload)
+    }, true);
+  }
+  await loadCloudPayments();
+}
+async function setCloudVisibility(item, visible) {
+  await sbRequest(`/rest/v1/payment_methods?id=eq.${encodeURIComponent(item.id)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ is_visible: visible })
+  }, true);
+  await loadCloudPayments();
+}
+async function deleteCloudPayment(item) {
+  await sbRequest(`/rest/v1/payment_methods?id=eq.${encodeURIComponent(item.id)}`, { method: "DELETE" }, true);
+  await loadCloudPayments();
+}
+async function signInAdmin() {
+  const email = prompt("管理者 Email：");
+  if (!email) return;
+  const password = prompt("Supabase 管理者密碼：");
+  if (password === null) return;
+  const session = await sbRequest("/auth/v1/token?grant_type=password", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  setSession(session);
+  const admins = await sbRequest(`/rest/v1/payment_admins?select=user_id&user_id=eq.${encodeURIComponent(session.user.id)}`, {}, true);
+  if (!admins.length) {
+    setSession(null);
+    throw new Error("此帳號尚未取得 Payment Hub 管理者權限。");
+  }
+  await loadCloudPayments();
+  await loadCloudHistory();
+  enterAdminMode();
+}
+
 /* ---------- DOM references ---------- */
 const banksGrid = document.getElementById("banks-grid");
 const ewalletGrid = document.getElementById("ewallet-grid");
@@ -279,8 +441,8 @@ function makeBankCard(bank) {
     dataset: { paymentId, search: `${bank.name} ${bank.code} ${bank.account}` }
   });
 
-  // QR code and compact bank brand mark are stacked vertically.
-  const media = createEl("div", { class: "card-media center bank-media" });
+  // media area (QR or placeholder)
+  const media = createEl("div", { class: "card-media center" });
   if (bank.hasQr && bank.image) {
     const img = createEl("img", {
       class: "card-img qr-img payment-qr",
@@ -298,29 +460,20 @@ function makeBankCard(bank) {
     media.appendChild(coming);
   }
 
+  // body
+  const body = createEl("div", { class: "card-body" });
+  const brand = createEl("span", { class: "bank-brand-wrap" });
   const logoUrl = BANK_LOGOS[bank.code];
-  const brand = createEl("span", { class: "bank-brand-wrap", title: `${bank.name} 品牌標誌` });
-  const fallback = createEl("span", { class: `bank-brand-fallback${logoUrl ? " is-loading" : ""}` },
-    bank.code === "826" ? "Rakuten" : bank.name.replace(/銀行|世華/g, "").slice(0, 3)
-  );
+  const fallback = createEl("span", { class: `bank-brand-fallback${logoUrl ? " is-loading" : ""}` }, bank.code === "826" ? "Rakuten" : bank.name.replace(/銀行|世華/g, "").slice(0, 2));
   if (logoUrl) {
-    const logo = createEl("img", {
-      class: "bank-brand-logo",
-      src: logoUrl,
-      alt: `${bank.name} 品牌標誌`,
-      loading: "lazy"
-    });
+    const logo = createEl("img", { class: "bank-brand-logo", src: logoUrl, alt: `${bank.name} 品牌標誌`, loading: "lazy" });
     logo.addEventListener("load", () => fallback.remove());
     logo.addEventListener("error", () => { logo.remove(); fallback.classList.remove("is-loading"); });
     brand.appendChild(logo);
   }
   brand.appendChild(fallback);
-  media.appendChild(brand);
-
-  // body
-  const body = createEl("div", { class: "card-body" });
   const heading = createEl("div", { class: "card-heading" },
-    createEl("h4", { class: "card-name" }, bank.name),
+    createEl("div", { class: "bank-name-brand" }, createEl("h4", { class: "card-name" }, bank.name), brand),
     makeFavoriteButton(paymentId, bank.name)
   );
   const meta = createEl("div", { class: "meta" },
@@ -569,13 +722,33 @@ function loadHistory() {
     return Array.isArray(value) ? value.slice(0, 50) : [];
   } catch { return []; }
 }
-function recordActivity(action, item) {
+async function recordActivity(action, item) {
   try {
+    const entry = { action, item, at: new Date().toISOString() };
     const history = loadHistory();
-    history.unshift({ action, item, at: new Date().toISOString() });
+    history.unshift(entry);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+    if (supabaseSession && await ensureSessionFresh()) {
+      await sbRequest("/rest/v1/payment_activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ action, item_name: item })
+      }, true);
+      await loadCloudHistory();
+    } else renderHistory();
+  } catch (error) {
+    console.warn("Could not save shared activity history", error);
     renderHistory();
-  } catch (error) { console.warn("Could not save activity history", error); }
+  }
+}
+async function loadCloudHistory() {
+  if (!supabaseSession || !await ensureSessionFresh()) { renderHistory(); return; }
+  try {
+    const rows = await sbRequest("/rest/v1/payment_activity?select=action,item_name,created_at&order=created_at.desc&limit=50", {}, true);
+    const history = rows.map(row => ({ action: row.action, item: row.item_name, at: row.created_at }));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (error) { console.warn("Could not load shared history", error); }
+  renderHistory();
 }
 function renderHistory() {
   const target = document.getElementById("admin-history-list");
@@ -633,11 +806,14 @@ function animateOverview() {
     requestAnimationFrame(frame);
   });
 }
-document.getElementById("clear-history")?.addEventListener("click", () => {
-  if (confirm("確定清除所有操作歷史？")) {
-    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+document.getElementById("clear-history")?.addEventListener("click", async () => {
+  if (!adminMode || !confirm("確定清除所有共用操作歷史？")) return;
+  try {
+    await sbRequest("/rest/v1/payment_activity?id=not.is.null", { method: "DELETE" }, true);
+    localStorage.removeItem(HISTORY_KEY);
     renderHistory();
-  }
+    showToast("共用操作紀錄已清除。");
+  } catch (error) { showToast(error.message || "無法清除操作紀錄。"); }
 });
 
 /* ---------- Personal admin mode ---------- */
@@ -648,44 +824,9 @@ const editor = document.getElementById("payment-editor");
 const importFile = document.getElementById("import-file");
 const $ = id => document.getElementById(id);
 
-async function hashPassword(password, salt) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 210000, hash: "SHA-256" }, key, 256);
-  return [...new Uint8Array(bits)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-}
-function fromBase64(value) {
-  return Uint8Array.from(atob(value), char => char.charCodeAt(0));
-}
-function toBase64(bytes) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
-}
 async function requestAdminAccess() {
-  if (!window.crypto?.subtle) {
-    showToast("This browser does not support secure password hashing.");
-    return;
-  }
-  const hasPassword = localStorage.getItem(ADMIN_HASH_KEY);
-  if (!hasPassword) {
-    const first = prompt("Create your personal admin password (at least 8 characters):");
-    if (first === null) return;
-    if (first.length < 8) { showToast("Password must be at least 8 characters."); return; }
-    const confirmPassword = prompt("Enter the password again to confirm:");
-    if (first !== confirmPassword) { showToast("Passwords do not match."); return; }
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const hash = await hashPassword(first, salt);
-    localStorage.setItem(ADMIN_SALT_KEY, toBase64(salt));
-    localStorage.setItem(ADMIN_HASH_KEY, hash);
-  } else {
-    const password = prompt("Enter your personal admin password:");
-    if (password === null) return;
-    const salt = fromBase64(localStorage.getItem(ADMIN_SALT_KEY));
-    if (await hashPassword(password, salt) !== hasPassword) {
-      showToast("Incorrect password.");
-      return;
-    }
-  }
-  enterAdminMode();
+  try { await signInAdmin(); }
+  catch (error) { showToast(error.message || "管理者登入失敗。"); }
 }
 function enterAdminMode() {
   adminMode = true;
@@ -699,6 +840,8 @@ function exitAdminMode() {
   adminPanel.hidden = true;
   editor.hidden = true;
   adminToggle.textContent = "Admin Mode";
+  setSession(null);
+  loadCloudPayments().catch(error => console.warn("Could not refresh public view", error));
 }
 function renderAdminLists() {
   const renderList = (items, type, target) => {
@@ -754,61 +897,54 @@ $("add-wallet").addEventListener("click", () => openEditor("wallet"));
 $("editor-cancel").addEventListener("click", () => { editor.hidden = true; });
 $("admin-banks-list").addEventListener("click", handleAdminListAction);
 $("admin-wallets-list").addEventListener("click", handleAdminListAction);
-function handleAdminListAction(event) {
+async function handleAdminListAction(event) {
   const button = event.target.closest("button[data-admin-action]");
   if (!button || !adminMode) return;
   const { adminAction, type, index } = button.dataset;
   const list = type === "bank" ? BANKS : EWALLETS;
   const itemIndex = Number(index);
-  if (adminAction === "edit") openEditor(type, itemIndex);
-  if (adminAction === "toggle-hidden") {
-    list[itemIndex].hidden = !list[itemIndex].hidden;
-    personalData = { banks: BANKS, ewallets: EWALLETS };
-    if (persistPersonalData()) {
-      recordActivity(list[itemIndex].hidden ? "暫時隱藏" : "重新顯示", list[itemIndex].name);
-      syncPaymentData(); renderAdminLists(); animateOverview();
-      showToast(list[itemIndex].hidden ? "已從首頁隱藏。" : "已重新顯示。");
+  const item = list[itemIndex];
+  if (!item) return;
+  try {
+    if (adminAction === "edit") openEditor(type, itemIndex);
+    if (adminAction === "toggle-hidden") {
+      await setCloudVisibility(item, item.hidden);
+      await recordActivity(item.hidden ? "重新顯示" : "全站隱藏", item.name);
+      showToast(item.hidden ? "已向所有訪客隱藏。" : "已向所有訪客重新顯示。");
     }
-  }
-  if (adminAction === "delete") {
-    if (!confirm(`Delete "${list[itemIndex].name}"? This only changes this browser.`)) return;
-    const removedName = list[itemIndex].name;
-    list.splice(itemIndex, 1);
-    personalData = { banks: BANKS, ewallets: EWALLETS };
-    if (persistPersonalData()) { recordActivity("刪除", removedName); syncPaymentData(); renderAdminLists(); animateOverview(); showToast("Payment method deleted."); }
-  }
+    if (adminAction === "delete") {
+      if (!confirm(`確定永久刪除「${item.name}」？此操作會影響所有訪客。`)) return;
+      await deleteCloudPayment(item);
+      await recordActivity("刪除", item.name);
+      showToast("已從全站刪除。");
+    }
+    renderAdminLists();
+  } catch (error) { showToast(error.message || "雲端操作失敗。"); }
 }
 editor.addEventListener("submit", async event => {
   event.preventDefault();
-  if (!adminMode) return;
+  if (!adminMode || !supabaseSession) return;
   const type = $("editor-type").value;
   const index = Number($("editor-original-id").value);
   const isBank = type === "bank";
   const name = $("editor-name").value.trim();
   const code = $("editor-code").value.trim();
   const account = $("editor-account").value.trim();
-  if (!name || (isBank && (!code || !account))) { showToast("Please complete the required fields."); return; }
+  if (!name || (isBank && (!code || !account))) { showToast("請填寫必要欄位。"); return; }
   try {
     const list = isBank ? BANKS : EWALLETS;
-    const old = index < 0 ? {} : list[index];
-    const imageFile = $("editor-image").files[0];
-    const image = imageFile ? await readImageFile(imageFile) : (old.image || "");
-    const item = isBank
-      ? { name, code, account, image, hasQr: Boolean(image) }
-      : { name, image };
     const duplicate = list.some((entry, i) => i !== index && (isBank ? entry.code === code : entry.name.toLocaleLowerCase() === name.toLocaleLowerCase()));
-    if (duplicate) { showToast(isBank ? "This bank code already exists." : "This e-wallet name already exists."); return; }
-    if (index < 0) list.push(item); else list[index] = { ...item, hidden: old.hidden || false };
-    personalData = { banks: BANKS, ewallets: EWALLETS };
-    if (!persistPersonalData()) return;
+    if (duplicate) { showToast(isBank ? "銀行代碼已存在。" : "電子支付名稱已存在。"); return; }
+    const file = $("editor-image").files[0];
+    await saveCloudPayment(type, index, { name, code, account }, file);
     editor.hidden = true;
-    recordActivity(index < 0 ? "新增" : "編輯", name);
-    syncPaymentData();
+    editor.reset();
+    await recordActivity(index < 0 ? "新增" : "編輯", name);
     renderAdminLists();
-    animateOverview();
-    showToast("Saved in this browser.");
-  } catch (error) { showToast(error.message || "Could not save this payment method."); }
+    showToast("已儲存至共用資料庫，所有訪客都會看到更新。");
+  } catch (error) { showToast(error.message || "無法儲存資料。"); }
 });
+
 $("export-data").addEventListener("click", () => {
   const backup = {
     format: "payment-hub-personal-backup",
@@ -872,10 +1008,11 @@ document.getElementById("clear-history")?.addEventListener("click", () => {
 });
 
 /* ---------- Startup ---------- ---------- */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   startLiveClock();
   initTheme();
   favorites = loadFavorites();
+  supabaseSession = getSession();
   BANKS.splice(0, BANKS.length, ...personalData.banks);
   EWALLETS.splice(0, EWALLETS.length, ...personalData.ewallets);
   renderAll();
@@ -885,4 +1022,11 @@ document.addEventListener("DOMContentLoaded", () => {
   renderHistory();
   animateOverview();
   headerFadeIn();
+  try {
+    if (supabaseSession && !await ensureSessionFresh()) supabaseSession = null;
+    await loadCloudPayments();
+  } catch (error) {
+    console.error("Supabase connection failed:", error);
+    showToast("雲端資料讀取失敗，暫時顯示本機預設資料。請檢查網路或 Supabase 設定。", 5000);
+  }
 });

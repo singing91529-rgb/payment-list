@@ -31,5 +31,20 @@ Upload `index.html`, `style.css`, `script.js`, `README.md`, and the `images/` fo
 
 Operation history and theme preferences are stored locally in the current browser. Hidden payment methods remain in personal data and can be shown again from Admin Mode.
 
-## Bank logo placement
-Bank brand marks are displayed as compact icons beneath the QR image, not beside the account name. The logo is constrained to a maximum of 42×17 CSS pixels (smaller than the QR code).
+
+## Supabase shared backend
+
+This build connects to the Payment Hub Supabase project using its publishable key (safe for browser use when paired with the RLS policies). It loads shared payment methods from `public.payment_methods`, reads QR images from the public `payment-qr` bucket, and uses Supabase Auth for administrator sign-in.
+
+### Before publishing this build
+1. Run `SUPABASE_SETUP.sql` in Supabase SQL Editor. This creates shared admin activity history, grants the required table privileges, and removes the unnecessary broad Storage SELECT policy.
+2. Confirm the `payment_admins` row exists for the intended administrator account.
+3. Confirm `payment_methods` contains the 12 seeded rows and `qr_image_path` values point to the uploaded files in `payment-qr`.
+4. Keep the `payment-qr` bucket public so visitors can fetch QR image public URLs. Uploading, updating and deleting objects remain restricted by Storage policies.
+5. Publish the files to GitHub Pages.
+
+### Admin sign-in
+Click Admin Mode and enter the email/password of the Supabase Auth user whose UID is present in `public.payment_admins`. The password is sent directly to Supabase Auth over HTTPS and is not stored in this site's localStorage. Signing out exits admin mode.
+
+### Shared data behavior
+Payment method creation, editing, deletion, and visibility changes are written to Supabase and are shared by all visitors. Theme preference and favorites remain browser-local. The QR upload control accepts JPG/PNG up to 1.5 MB.

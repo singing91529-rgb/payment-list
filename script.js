@@ -707,8 +707,33 @@ importFile.addEventListener("change", async () => {
   finally { importFile.value = ""; }
 });
 
-/* ---------- Startup ---------- */
+
+/* ---------- Live date and time (Taiwan) ---------- */
+function startLiveClock() {
+  const dateNode = document.getElementById("live-date");
+  const timeNode = document.getElementById("live-time");
+  if (!dateNode || !timeNode) return;
+  const dateFormatter = new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei", year: "numeric", month: "2-digit",
+    day: "2-digit", weekday: "long"
+  });
+  const timeFormatter = new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit",
+    second: "2-digit", hourCycle: "h23"
+  });
+  const update = () => {
+    const now = new Date();
+    dateNode.textContent = dateFormatter.format(now);
+    timeNode.textContent = timeFormatter.format(now);
+    timeNode.dateTime = now.toISOString();
+  };
+  update();
+  window.setInterval(update, 1000);
+}
+
+/* ---------- Startup ---------- ---------- */
 document.addEventListener("DOMContentLoaded", () => {
+  startLiveClock();
   favorites = loadFavorites();
   BANKS.splice(0, BANKS.length, ...personalData.banks);
   EWALLETS.splice(0, EWALLETS.length, ...personalData.ewallets);

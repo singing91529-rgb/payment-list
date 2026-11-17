@@ -5,7 +5,7 @@ Static payment methods website (HTML/CSS/Vanilla JS) for GitHub Pages.
 ## Features
 - Responsive dark glassmorphism theme and animated hero
 - Bank transfer cards, e-wallet QR cards, and USDT (TRC20)
-- Search and favorites (browser localStorage)
+- Live Taiwan date and clock (updates every second)\n- Search and favorites (browser localStorage)
 - Fullscreen QR viewer and copy actions
 - Personal Admin Mode: create, edit, and delete banks / e-wallets
 - Upload JPG / PNG QR images (up to 1.5 MB per image)

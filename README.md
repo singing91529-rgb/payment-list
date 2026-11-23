@@ -55,3 +55,5 @@ Payment method creation, editing, deletion, and visibility changes are written t
 - Logos are displayed beside each bank name, not below the QR code.
 - Logo paths are local to the GitHub Pages site; no third-party image host is required.
 - Mobile card layout reduces QR and logo sizes while preserving account/action readability.
+
+\n## 新增：親友轉帳與匯率換算\n\n- 首頁新增「親友轉帳資料」及「匯率換算」入口。\n- 親友查詢使用 Auth 使用者 `payment-viewer@payment-hub.local`；訪客只輸入該使用者建立時設定的共用密碼。此登入狀態獨立儲存，不會覆蓋管理員工作階段。\n- 管理員登入後可在親友頁新增、編輯、刪除資料；資料庫 RLS 仍是最終權限控管。\n- 請先執行 `SUPABASE_PRIVATE_FEATURES.sql`，確認 Viewer UID 與 SQL 中的 UID 一致。\n- 匯率頁直接嘗試讀取台灣銀行當日 CSV；若瀏覽器跨網域政策阻擋，頁面會顯示無法取得資料，不會捏造匯率。\n

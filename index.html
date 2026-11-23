@@ -95,6 +95,57 @@
     </section>
     <p id="search-empty" class="search-empty container" role="status" hidden>No payment methods found. Try another name, bank code, or account number.</p>
 
+
+
+    <section id="friends-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">PRIVATE TRANSFER DIRECTORY</p><h2>親友轉帳資料</h2><p class="muted">輸入共用密碼後，查看親友提供的收款資訊。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div id="friend-login" class="tool-card">
+        <label>共用查詢密碼<input id="friend-password" type="password" autocomplete="current-password" placeholder="請輸入共用密碼"></label>
+        <button id="friend-login-btn" class="btn" type="button">驗證並進入</button>
+        <p id="friend-login-message" class="muted" role="status"></p>
+      </div>
+      <div id="friend-content" hidden>
+        <div class="tool-heading"><h3>親友名單</h3><button id="friend-logout" class="btn btn-secondary" type="button">登出</button></div>
+        <input id="friend-search" type="search" placeholder="搜尋姓名、銀行或備註" aria-label="搜尋親友資料">
+        <div id="friend-list" class="friend-list"></div>
+        <section id="friend-admin-editor" class="tool-card" hidden>
+          <h3 id="friend-form-title">新增親友帳戶</h3>
+          <form id="friend-form">
+            <input id="friend-id" type="hidden">
+            <div class="tool-form-grid">
+              <label>姓名／稱呼<input id="friend-name" required maxlength="80"></label>
+              <label>銀行名稱<input id="friend-bank" required maxlength="80"></label>
+              <label>銀行代碼<input id="friend-code" maxlength="12"></label>
+              <label>分行<input id="friend-branch" maxlength="80"></label>
+              <label class="wide">銀行帳號<input id="friend-account" required maxlength="80"></label>
+              <label class="wide">備註<input id="friend-note" maxlength="240"></label>
+            </div>
+            <label class="inline-check"><input id="friend-active" type="checkbox" checked> 顯示於親友名單</label>
+            <div class="editor-actions"><button class="btn" type="submit">儲存資料</button><button id="friend-form-reset" class="btn btn-secondary" type="button">清空表單</button></div>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <section id="fx-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">CURRENCY CONVERTER</p><h2>匯率換算</h2><p class="muted">台灣銀行牌告匯率；匯率以銀行實際公告為準。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div class="tool-card fx-card">
+        <label>匯率種類<select id="fx-type"><option value="spot">即期匯率</option><option value="cash">現金匯率</option></select></label>
+        <label>幣別<select id="fx-currency"><option value="JPY">日圓 JPY</option><option value="USD">美元 USD</option><option value="KRW">韓元 KRW</option><option value="AUD">澳幣 AUD</option><option value="CNY">人民幣 CNY</option></select></label>
+        <div class="fx-direction-row">
+          <span id="fx-direction-label">目前方向：外幣 → 台幣</span>
+          <button id="fx-direction-toggle" class="btn btn-secondary" type="button" aria-label="切換換算方向">切換換算方向</button>
+        </div>
+        <div class="tool-form-grid">
+          <label>外幣金額<input id="fx-foreign" type="number" min="0" step="any" value="10000" inputmode="decimal"></label>
+          <label>台幣金額<input id="fx-twd" type="number" min="0" step="any" placeholder="自動計算" inputmode="decimal" readonly></label>
+        </div>
+        <div class="fx-result"><span id="fx-result-label">外幣換算台幣</span><strong id="fx-result">載入匯率中…</strong></div>
+        <p id="fx-rate-detail" class="muted" role="status">資料來源：台灣銀行。載入中…</p>
+        <button id="fx-refresh" class="btn btn-secondary" type="button">更新匯率</button>
+      </div>
+    </section>
+
     <section class="sections container">
       <div id="favorites-section" class="section-block favorites-section" hidden>
         <h3 class="section-title">★ Favorites</h3>
@@ -135,6 +186,18 @@
       </div>
     </section>
   </main>
+
+  <nav class="bottom-app-nav" aria-label="主要功能導覽">
+    <button class="app-nav-item is-active" type="button" data-nav-page="home" aria-current="page">
+      <span class="app-nav-icon" aria-hidden="true">▣</span><span>付款方式</span>
+    </button>
+    <button class="app-nav-item" type="button" data-nav-page="friends">
+      <span class="app-nav-icon" aria-hidden="true">♧</span><span>親友轉帳</span>
+    </button>
+    <button class="app-nav-item" type="button" data-nav-page="fx">
+      <span class="app-nav-icon" aria-hidden="true">⇄</span><span>匯率換算</span>
+    </button>
+  </nav>
 
   <footer class="site-footer">
     <div class="container footer-inner">

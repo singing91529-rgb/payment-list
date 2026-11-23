@@ -834,6 +834,7 @@ function enterAdminMode() {
   adminPanel.hidden = false;
   adminToggle.textContent = "Admin Mode ✓";
   renderAdminLists();
+  if (friendViewerSession) { $("friend-admin-editor").hidden = false; renderFriendRows(); }
   adminPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 function exitAdminMode() {
@@ -841,6 +842,7 @@ function exitAdminMode() {
   adminPanel.hidden = true;
   editor.hidden = true;
   adminToggle.textContent = "Admin Mode";
+  if ($("friend-admin-editor")) $("friend-admin-editor").hidden = true;
   setSession(null);
   loadCloudPayments().catch(error => console.warn("Could not refresh public view", error));
 }
@@ -1008,9 +1010,297 @@ document.getElementById("clear-history")?.addEventListener("click", () => {
   }
 });
 
+
+/* ---------- Private friends directory (separate viewer session) ---------- */
+const FRIEND_VIEWER_EMAIL = "payment-viewer@payment-hub.local";
+const FRIEND_VIEWER_SESSION_KEY = "payment-hub-friend-viewer-session-v1";
+let friendViewerSession = null;
+let friendRows = [];
+const FRIENDS_TABLE = "friend_bank_accounts";
+function loadFriendViewerSession() {
+  try { friendViewerSession = JSON.parse(sessionStorage.getItem(FRIEND_VIEWER_SESSION_KEY) || "null"); }
+  catch { friendViewerSession = null; }
+}
+function saveFriendViewerSession(session) {
+  friendViewerSession = session;
+  if (session) sessionStorage.setItem(FRIEND_VIEWER_SESSION_KEY, JSON.stringify(session));
+  else sessionStorage.removeItem(FRIEND_VIEWER_SESSION_KEY);
+}
+async function friendRequest(path, options = {}, admin = false) {
+  const useAdminToken = admin || (adminMode && supabaseSession?.access_token);
+  const token = useAdminToken ? supabaseSession?.access_token : friendViewerSession?.access_token;
+  if (!token) throw new Error("請先登入親友轉帳資料。");
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, ...(options.headers || {}) }
+  });
+  const raw = await response.text();
+  let data = null; try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+  if (!response.ok) throw new Error(data?.message || data?.hint || `資料庫請求失敗 (${response.status})`);
+  return data;
+}
+async function loadFriendRows() {
+  friendRows = await friendRequest(`/rest/v1/${FRIENDS_TABLE}?select=*&order=name.asc`);
+  renderFriendRows();
+}
+function renderFriendRows() {
+  const list = $("friend-list"); if (!list) return;
+  list.replaceChildren();
+  const q = ($("friend-search")?.value || "").trim().toLowerCase();
+  const rows = friendRows.filter(r => (r.is_active || adminMode) &&
+    [r.name,r.bank_name,r.bank_code,r.branch_name,r.account_number,r.note].join(" ").toLowerCase().includes(q));
+  if (!rows.length) { list.append(createEl("p",{class:"muted"},"目前沒有符合條件的親友資料。")); return; }
+  rows.forEach(row => {
+    const card = createEl("article",{class:"friend-card"});
+    const top = createEl("div",{class:"tool-heading"},
+      createEl("div",{},createEl("h3",{},row.name),createEl("p",{class:"muted"},`${row.bank_name || ""}${row.bank_code ? ` · ${row.bank_code}` : ""}${row.branch_name ? ` · ${row.branch_name}` : ""}`))
+    );
+    const account = createEl("strong",{class:"friend-account"},row.account_number || "");
+    const actions = createEl("div",{class:"editor-actions"});
+    actions.append(createEl("button",{class:"btn btn-secondary",type:"button",onclick:()=>copyText(row.account_number || "","已複製銀行帳號")},"複製帳號"));
+    if (adminMode) {
+      actions.append(createEl("button",{class:"btn btn-secondary",type:"button",onclick:()=>fillFriendForm(row)},"編輯"));
+      actions.append(createEl("button",{class:"btn btn-danger",type:"button",onclick:()=>deleteFriendRow(row)},"刪除"));
+    }
+    card.append(top,account);
+    if (row.note) card.append(createEl("p",{class:"muted"},row.note));
+    card.append(actions); list.append(card);
+  });
+}
+function fillFriendForm(row) {
+  $("friend-id").value=row.id; $("friend-name").value=row.name||""; $("friend-bank").value=row.bank_name||"";
+  $("friend-code").value=row.bank_code||""; $("friend-branch").value=row.branch_name||"";
+  $("friend-account").value=row.account_number||""; $("friend-note").value=row.note||"";
+  $("friend-active").checked=!!row.is_active; $("friend-form-title").textContent="編輯親友帳戶";
+  $("friend-admin-editor").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function resetFriendForm() {
+  $("friend-form")?.reset(); $("friend-id").value=""; $("friend-active").checked=true;
+  $("friend-form-title").textContent="新增親友帳戶";
+}
+async function deleteFriendRow(row) {
+  if (!confirm(`確定刪除「${row.name}」的銀行資料？`)) return;
+  try { await friendRequest(`/rest/v1/${FRIENDS_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"DELETE"},true); await loadFriendRows(); showToast("親友資料已刪除。"); }
+  catch(e){showToast(e.message);}
+}
+async function enterFriendDirectory(password) {
+  const message=$("friend-login-message"); message.textContent="驗證中…";
+  const session=await sbRequest("/auth/v1/token?grant_type=password",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:FRIEND_VIEWER_EMAIL,password})
+  });
+  saveFriendViewerSession(session);
+  await loadFriendRows();
+  $("friend-login").hidden=true; $("friend-content").hidden=false;
+  $("friend-admin-editor").hidden=!adminMode;
+  message.textContent="";
+}
+function setActiveAppNav(page) {
+  document.querySelectorAll("[data-nav-page]").forEach(button=>{
+    const active=button.dataset.navPage===page;
+    button.classList.toggle("is-active",active);
+    if(active) button.setAttribute("aria-current","page"); else button.removeAttribute("aria-current");
+  });
+}
+function openTool(name) {
+  setActiveAppNav(name);
+  document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
+  document.getElementById(`${name}-tool`).hidden=false;
+  if(name==="friends" && (friendViewerSession || adminMode)){ loadFriendRows().then(()=>{ $("friend-login").hidden=true; $("friend-content").hidden=false; $("friend-admin-editor").hidden=!adminMode; }).catch(err=>{ if(!adminMode) saveFriendViewerSession(null); console.warn(err); }); }
+  document.querySelector(".sections").hidden=true;
+  document.querySelector(".search-panel").hidden=true;
+  document.getElementById("search-empty").hidden=true;
+  document.getElementById(`${name}-tool`).scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closeTools() {
+  document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
+  document.querySelector(".sections").hidden=false;
+  document.querySelector(".search-panel").hidden=false;
+  setActiveAppNav("home");
+}
+document.querySelectorAll("[data-nav-page]").forEach(button=>button.addEventListener("click",()=>{
+  const page=button.dataset.navPage;
+  if(page==="home") closeTools(); else openTool(page);
+}));
+document.querySelectorAll("[data-open-tool]").forEach(b=>b.addEventListener("click",()=>openTool(b.dataset.openTool)));
+document.querySelectorAll("[data-close-tool]").forEach(b=>b.addEventListener("click",closeTools));
+$("friend-login-btn")?.addEventListener("click",async()=>{
+  const pw=$("friend-password").value;
+  if(!pw){$("friend-login-message").textContent="請輸入共用密碼。";return;}
+  try{await enterFriendDirectory(pw);}catch(e){$("friend-login-message").textContent="登入失敗，請確認共用密碼。";console.warn(e);}
+});
+$("friend-password")?.addEventListener("keydown",e=>{if(e.key==="Enter")$("friend-login-btn").click();});
+$("friend-logout")?.addEventListener("click",()=>{saveFriendViewerSession(null);friendRows=[];$("friend-content").hidden=true;$("friend-login").hidden=false;$("friend-password").value="";});
+$("friend-search")?.addEventListener("input",renderFriendRows);
+$("friend-form-reset")?.addEventListener("click",resetFriendForm);
+$("friend-form")?.addEventListener("submit",async e=>{
+  e.preventDefault(); if(!adminMode || !supabaseSession){showToast("請先以管理員身分登入，再管理親友資料。");return;}
+  const id=$("friend-id").value;
+  const payload={name:$("friend-name").value.trim(),bank_name:$("friend-bank").value.trim(),bank_code:$("friend-code").value.trim(),branch_name:$("friend-branch").value.trim(),account_number:$("friend-account").value.trim(),note:$("friend-note").value.trim(),is_active:$("friend-active").checked};
+  try{
+    await friendRequest(`/rest/v1/${FRIENDS_TABLE}${id?`?id=eq.${encodeURIComponent(id)}`:""}`,{method:id?"PATCH":"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)},true);
+    resetFriendForm(); await loadFriendRows(); showToast("親友資料已儲存。");
+  }catch(err){showToast(err.message||"儲存失敗。");}
+});
+
+/* ---------- Taiwan Bank exchange rates ---------- */
+let fxRates = {};
+let fxUpdatedAt = "";
+let fxSourceLabel = "";
+const FX_CURRENCY_NAMES = {USD:"美金",JPY:"日圓",KRW:"韓元",AUD:"澳幣",CNY:"人民幣"};
+
+async function fetchBotCsv() {
+  const target = "https://rate.bot.com.tw/xrt/flcsv/0/day";
+  const urls = [
+    target,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
+  ];
+  let lastError;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {cache:"no-store"});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const csv = await res.text();
+      if (!csv.includes("日圓") && !csv.includes("美金")) throw new Error("回傳內容不是台銀匯率 CSV");
+      return csv;
+    } catch (err) { lastError = err; }
+  }
+  throw lastError || new Error("無法取得台銀匯率");
+}
+
+async function fetchReferenceRates() {
+  const res = await fetch("https://open.er-api.com/v6/latest/TWD", {cache:"no-store"});
+  if (!res.ok) throw new Error(`參考匯率服務 HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.result !== "success" || !data.rates) throw new Error("參考匯率資料格式錯誤");
+  const out = {};
+  for (const code of Object.keys(FX_CURRENCY_NAMES)) {
+    const perTwd = Number(data.rates[code]);
+    if (!Number.isFinite(perTwd) || perTwd <= 0) continue;
+    // Public market reference rate only; not a bank buy/sell quote.
+    const twdPerUnit = 1 / perTwd;
+    out[code] = {cashBuy:twdPerUnit, cashSell:twdPerUnit, spotBuy:twdPerUnit, spotSell:twdPerUnit, reference:true};
+  }
+  if (!Object.keys(out).length) throw new Error("沒有可用的參考匯率");
+  return out;
+}
+
+async function loadFxRates() {
+  const detail = $("fx-rate-detail");
+  const result = $("fx-result");
+  if (detail) detail.textContent = "正在更新匯率資料…";
+  if (result) result.textContent = "載入中…";
+  try {
+    const csv = await fetchBotCsv();
+    const lines = csv.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+    const map = Object.fromEntries(Object.entries(FX_CURRENCY_NAMES).map(([k,v]) => [v,k]));
+    const parsed = {};
+    for (const line of lines.slice(1)) {
+      const cols = line.split(",");
+      const code = (cols[0] || "").trim();
+      const key = map[code];
+      if (!key) continue;
+      const nums = cols.slice(1,5).map(v => Number.parseFloat(v));
+      if (nums.some(v => !Number.isFinite(v))) continue;
+      parsed[key] = {cashBuy:nums[0], cashSell:nums[1], spotBuy:nums[2], spotSell:nums[3], reference:false};
+    }
+    if (Object.keys(parsed).length < 5) throw new Error("台銀資料缺少所需幣別");
+    fxRates = parsed;
+    fxSourceLabel = "台灣銀行牌告匯率";
+    fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
+    updateFxResult();
+  } catch (botError) {
+    console.warn("BOT rate fetch failed; trying public reference rates", botError);
+    try {
+      fxRates = await fetchReferenceRates();
+      fxSourceLabel = "公開市場參考匯率（非台灣銀行牌告；買賣價差及現鈔加減碼未計）";
+      fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
+      updateFxResult();
+    } catch (fallbackError) {
+      fxRates = {};
+      if (detail) detail.textContent = "目前無法取得匯率資料，請稍後重試。可至台灣銀行官網查詢最新牌告匯率。";
+      if (result) result.textContent = "暫無匯率";
+      console.warn("FX reference rate fetch failed", fallbackError);
+    }
+  }
+}
+
+let fxInputMode = "foreign";
+
+function syncFxInputMode() {
+  const foreignInput = $("fx-foreign");
+  const twdInput = $("fx-twd");
+  const label = $("fx-direction-label");
+  const toggle = $("fx-direction-toggle");
+  if (!foreignInput || !twdInput) return;
+
+  const foreignIsInput = fxInputMode === "foreign";
+  foreignInput.readOnly = !foreignIsInput;
+  twdInput.readOnly = foreignIsInput;
+  foreignInput.placeholder = foreignIsInput ? "輸入外幣金額" : "自動計算";
+  twdInput.placeholder = foreignIsInput ? "自動計算" : "輸入台幣金額";
+  foreignInput.classList.toggle("fx-output-field", !foreignIsInput);
+  twdInput.classList.toggle("fx-output-field", foreignIsInput);
+  if (label) label.textContent = foreignIsInput ? "目前方向：外幣 → 台幣" : "目前方向：台幣 → 外幣";
+  if (toggle) toggle.textContent = foreignIsInput ? "切換為台幣換外幣" : "切換為外幣換台幣";
+}
+
+function updateFxResult() {
+  const currency = $("fx-currency").value;
+  const type = $("fx-type").value;
+  const rate = fxRates[currency];
+  if (!rate) { $("fx-result").textContent = "暫無匯率"; return; }
+  const buy = type === "cash" ? rate.cashBuy : rate.spotBuy;
+  const sell = type === "cash" ? rate.cashSell : rate.spotSell;
+
+  if (fxInputMode === "foreign") {
+    const foreign = Number.parseFloat($("fx-foreign").value);
+    $("fx-twd").value = Number.isFinite(foreign) && foreign >= 0
+      ? (foreign * buy).toFixed(2) : "";
+    $("fx-result-label").textContent = "外幣換算台幣（估算）";
+    $("fx-result").textContent = Number.isFinite(foreign) && foreign >= 0
+      ? `NT$ ${(foreign * buy).toLocaleString("zh-TW", {maximumFractionDigits:2})}` : "請輸入外幣金額";
+  } else {
+    const twd = Number.parseFloat($("fx-twd").value);
+    $("fx-foreign").value = Number.isFinite(twd) && twd >= 0
+      ? (twd / sell).toFixed(2) : "";
+    $("fx-result-label").textContent = "台幣換算外幣（估算）";
+    $("fx-result").textContent = Number.isFinite(twd) && twd >= 0
+      ? `${(twd / sell).toLocaleString("zh-TW", {maximumFractionDigits:2})} ${currency}` : "請輸入台幣金額";
+  }
+
+  const rateType = type === "cash" ? "現金" : "即期";
+  if (rate.reference) {
+    $("fx-rate-detail").textContent = `${fxSourceLabel}｜${rateType}模式以同一參考價估算：${buy.toFixed(4)} TWD/${currency}｜更新：${fxUpdatedAt}。實際銀行買賣匯率可能不同。`;
+  } else {
+    $("fx-rate-detail").textContent = `${fxSourceLabel}｜${rateType}買入 ${buy}／賣出 ${sell}｜頁面更新：${fxUpdatedAt}。實際成交匯率及手續費以銀行為準。`;
+  }
+}
+
+$("fx-direction-toggle")?.addEventListener("click", () => {
+  fxInputMode = fxInputMode === "foreign" ? "twd" : "foreign";
+  if (fxInputMode === "foreign") $("fx-twd").value = "";
+  else $("fx-foreign").value = "";
+  syncFxInputMode();
+  updateFxResult();
+  const target = fxInputMode === "foreign" ? $("fx-foreign") : $("fx-twd");
+  target?.focus();
+});
+$("fx-foreign")?.addEventListener("input", () => {
+  if (fxInputMode === "foreign") updateFxResult();
+});
+$("fx-twd")?.addEventListener("input", () => {
+  if (fxInputMode === "twd") updateFxResult();
+});
+["fx-type","fx-currency"].forEach(id => $(id)?.addEventListener("change", updateFxResult));
+$("fx-refresh")?.addEventListener("click", loadFxRates);
+syncFxInputMode();
+
 /* ---------- Startup ---------- ---------- */
 document.addEventListener("DOMContentLoaded", async () => {
   startLiveClock();
+  loadFriendViewerSession();
+  loadFxRates();
   initTheme();
   favorites = loadFavorites();
   supabaseSession = getSession();

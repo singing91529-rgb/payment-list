@@ -835,6 +835,7 @@ function enterAdminMode() {
   adminToggle.textContent = "Admin Mode ✓";
   renderAdminLists();
   if (friendViewerSession) { $("friend-admin-editor").hidden = false; renderFriendRows(); }
+  if (document.getElementById("debt-tool") && !document.getElementById("debt-tool").hidden) { $("debt-admin-area").hidden = false; loadDebtRows().catch(e=>showToast(e.message)); }
   adminPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 function exitAdminMode() {
@@ -1095,6 +1096,94 @@ async function enterFriendDirectory(password) {
   $("friend-admin-editor").hidden=!adminMode;
   message.textContent="";
 }
+
+/* ---------- Debt reminder: public submission + admin-only records ---------- */
+const DEBT_TABLE = "debt_reminders";
+let debtRows = [];
+let debtFilter = "all";
+async function submitDebtReminder(payload) {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-debt-reminder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
+    body: JSON.stringify(payload)
+  });
+  const raw = await response.text(); let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = { message: raw }; }
+  if (!response.ok) throw new Error(data?.error || data?.message || `送出失敗 (${response.status})`);
+  return data;
+}
+function moneyTwd(value) { return `NT$ ${Number(value || 0).toLocaleString("zh-TW")}`; }
+function formatDebtDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("zh-TW", { timeZone:"Asia/Taipei", year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23" }).format(new Date(value));
+}
+async function loadDebtRows() {
+  if (!adminMode || !supabaseSession || !await ensureSessionFresh()) throw new Error("請先登入管理帳號。");
+  debtRows = await sbRequest(`/rest/v1/${DEBT_TABLE}?select=*&order=created_at.desc`, {}, true);
+  renderDebtAdmin();
+}
+function renderDebtAdmin() {
+  const pending = debtRows.filter(row => row.status === "pending");
+  const paid = debtRows.filter(row => row.status === "paid");
+  $("debt-pending-count").textContent = pending.length;
+  $("debt-pending-total").textContent = moneyTwd(pending.reduce((sum,row)=>sum+Number(row.amount||0),0));
+  $("debt-paid-count").textContent = paid.length;
+  const list = $("debt-record-list"); list.replaceChildren();
+  const rows = debtRows.filter(row => debtFilter === "all" || row.status === debtFilter);
+  if (!rows.length) { list.append(createEl("p",{class:"muted"},"目前沒有符合條件的欠款提醒。")); return; }
+  rows.forEach(row => {
+    const card = createEl("article",{class:"debt-record"});
+    const top = createEl("div",{class:"debt-record-top"},
+      createEl("strong",{},row.sender_name),
+      createEl("span",{class:`debt-status${row.status === "paid" ? " paid" : ""}`},row.status === "paid" ? "✓ 已還款" : "待還款")
+    );
+    const subject = createEl("div",{},row.subject);
+    const amount = createEl("div",{class:"debt-record-amount"},moneyTwd(row.amount));
+    const meta = createEl("div",{class:"debt-record-meta"},`通知時間：${formatDebtDate(row.created_at)}`);
+    card.append(top,subject,amount);
+    if (row.note) card.append(createEl("p",{class:"muted"},row.note));
+    card.append(meta);
+    const actions = createEl("div",{class:"debt-record-actions"});
+    const toggle = createEl("button",{type:"button",onclick:()=>updateDebtStatus(row)},row.status === "paid" ? "改回待還款" : "標記已還款");
+    const edit = createEl("button",{type:"button",onclick:()=>editDebtRecord(row)},"編輯");
+    const del = createEl("button",{type:"button",class:"danger",onclick:()=>deleteDebtRecord(row)},"刪除");
+    actions.append(toggle,edit,del); card.append(actions); list.append(card);
+  });
+}
+async function updateDebtStatus(row) {
+  const next = row.status === "paid" ? "pending" : "paid";
+  try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({status:next,updated_at:new Date().toISOString()})},true); await loadDebtRows(); showToast(next === "paid" ? "已標記為還款完成。" : "已改回待還款。"); }
+  catch(e){showToast(e.message || "更新失敗。");}
+}
+async function editDebtRecord(row) {
+  const sender = prompt("通知人姓名",row.sender_name); if (sender === null) return;
+  const subject = prompt("欠款事項",row.subject); if (subject === null) return;
+  const amountText = prompt("欠款金額（NT$）",String(row.amount)); if (amountText === null) return;
+  const amount = Number(amountText);
+  if (!sender.trim() || !subject.trim() || !Number.isFinite(amount) || amount <= 0) { showToast("請輸入有效的姓名、事項及金額。"); return; }
+  const note = prompt("補充說明（可留空）",row.note || ""); if (note === null) return;
+  try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({sender_name:sender.trim(),subject:subject.trim(),amount,note:note.trim(),updated_at:new Date().toISOString()})},true); await loadDebtRows(); showToast("欠款提醒已更新。"); }
+  catch(e){showToast(e.message || "更新失敗。");}
+}
+async function deleteDebtRecord(row) {
+  if (!confirm(`確定刪除「${row.sender_name}－${row.subject}」這筆提醒？`)) return;
+  try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"DELETE"},true); await loadDebtRows(); showToast("欠款提醒已刪除。"); }
+  catch(e){showToast(e.message || "刪除失敗。");}
+}
+$("debt-submit-form")?.addEventListener("submit",async e=>{
+  e.preventDefault();
+  const button=$("debt-submit"); const message=$("debt-submit-message");
+  if ($("debt-website").value) return;
+  const payload={sender_name:$("debt-sender").value.trim(),subject:$("debt-subject").value.trim(),amount:Number($("debt-amount").value),note:$("debt-note").value.trim(),website:$("debt-website").value};
+  if(!payload.sender_name || !payload.subject || !Number.isFinite(payload.amount) || payload.amount<=0){message.textContent="請完整填寫姓名、欠款事項及有效金額。";return;}
+  button.disabled=true; button.textContent="送出中…"; message.textContent="正在送出提醒…";
+  try { await submitDebtReminder(payload); $("debt-submit-form").reset(); message.textContent="提醒已成功送出，管理者將收到 Email 通知。"; showToast("欠款提醒已送出。"); }
+  catch(err){ message.textContent=`${err.message}。若畫面顯示資料已保存但郵件失敗，請勿重複提交，管理者可登入後查看紀錄。`; }
+  finally {button.disabled=false;button.textContent="✉ 送出欠款提醒";}
+});
+$("debt-reload")?.addEventListener("click",()=>loadDebtRows().catch(e=>showToast(e.message)));
+document.querySelectorAll("[data-debt-filter]").forEach(button=>button.addEventListener("click",()=>{debtFilter=button.dataset.debtFilter;document.querySelectorAll("[data-debt-filter]").forEach(b=>b.classList.toggle("is-active",b===button));renderDebtAdmin();}));
+
 function setActiveAppNav(page) {
   document.querySelectorAll("[data-nav-page]").forEach(button=>{
     const active=button.dataset.navPage===page;
@@ -1107,6 +1196,10 @@ function openTool(name) {
   document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
   document.getElementById(`${name}-tool`).hidden=false;
   if(name==="friends" && (friendViewerSession || adminMode)){ loadFriendRows().then(()=>{ $("friend-login").hidden=true; $("friend-content").hidden=false; $("friend-admin-editor").hidden=!adminMode; }).catch(err=>{ if(!adminMode) saveFriendViewerSession(null); console.warn(err); }); }
+  if(name==="debt") {
+    $("debt-admin-area").hidden=!adminMode;
+    if(adminMode) loadDebtRows().catch(err=>showToast(err.message || "無法讀取欠款紀錄。"));
+  }
   document.querySelector(".sections").hidden=true;
   document.querySelector(".search-panel").hidden=true;
   document.getElementById("search-empty").hidden=true;
@@ -1147,54 +1240,18 @@ $("friend-form")?.addEventListener("submit",async e=>{
 let fxRates = {};
 let fxUpdatedAt = "";
 let fxSourceLabel = "";
-let fxIsRefreshing = false;
-const FX_CACHE_KEY = "paymentHubFxRatesCacheV1";
 const FX_CURRENCY_NAMES = {USD:"美金",JPY:"日圓",KRW:"韓元",AUD:"澳幣",CNY:"人民幣"};
-
-function setFxStatus(message, state = "info") {
-  const el = $("fx-fetch-status");
-  if (!el) return;
-  el.textContent = message;
-  el.dataset.state = state;
-}
-
-function readFxCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(FX_CACHE_KEY) || "null");
-    if (!cached || !cached.rates || !cached.updatedAt || !cached.sourceLabel) return false;
-    const valid = Object.keys(FX_CURRENCY_NAMES).every(code => {
-      const r = cached.rates[code];
-      return r && [r.cashBuy,r.cashSell,r.spotBuy,r.spotSell].every(v => Number.isFinite(Number(v)) && Number(v) > 0);
-    });
-    if (!valid) return false;
-    fxRates = cached.rates;
-    fxUpdatedAt = cached.updatedAt;
-    fxSourceLabel = cached.sourceLabel;
-    return true;
-  } catch (_) { return false; }
-}
-
-function saveFxCache() {
-  try {
-    localStorage.setItem(FX_CACHE_KEY, JSON.stringify({rates:fxRates,updatedAt:fxUpdatedAt,sourceLabel:fxSourceLabel}));
-  } catch (err) { console.warn("Unable to save FX cache", err); }
-}
-
-async function fetchWithTimeout(url, timeoutMs = 4500) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {cache:"no-store", signal:controller.signal});
-  } finally { clearTimeout(timer); }
-}
 
 async function fetchBotCsv() {
   const target = "https://rate.bot.com.tw/xrt/flcsv/0/day";
-  const urls = [target, `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`];
+  const urls = [
+    target,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
+  ];
   let lastError;
   for (const url of urls) {
     try {
-      const res = await fetchWithTimeout(url, 3000);
+      const res = await fetch(url, {cache:"no-store"});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const csv = await res.text();
       if (!csv.includes("日圓") && !csv.includes("美金")) throw new Error("回傳內容不是台銀匯率 CSV");
@@ -1205,7 +1262,7 @@ async function fetchBotCsv() {
 }
 
 async function fetchReferenceRates() {
-  const res = await fetchWithTimeout("https://open.er-api.com/v6/latest/TWD", 3000);
+  const res = await fetch("https://open.er-api.com/v6/latest/TWD", {cache:"no-store"});
   if (!res.ok) throw new Error(`參考匯率服務 HTTP ${res.status}`);
   const data = await res.json();
   if (data.result !== "success" || !data.rates) throw new Error("參考匯率資料格式錯誤");
@@ -1213,75 +1270,51 @@ async function fetchReferenceRates() {
   for (const code of Object.keys(FX_CURRENCY_NAMES)) {
     const perTwd = Number(data.rates[code]);
     if (!Number.isFinite(perTwd) || perTwd <= 0) continue;
+    // Public market reference rate only; not a bank buy/sell quote.
     const twdPerUnit = 1 / perTwd;
-    out[code] = {cashBuy:twdPerUnit,cashSell:twdPerUnit,spotBuy:twdPerUnit,spotSell:twdPerUnit,reference:true};
+    out[code] = {cashBuy:twdPerUnit, cashSell:twdPerUnit, spotBuy:twdPerUnit, spotSell:twdPerUnit, reference:true};
   }
   if (!Object.keys(out).length) throw new Error("沒有可用的參考匯率");
   return out;
 }
 
 async function loadFxRates() {
-  if (fxIsRefreshing) return;
-  fxIsRefreshing = true;
-  const button = $("fx-refresh");
-  if (button) { button.disabled = true; button.textContent = "更新中…"; }
-  const hadData = Object.keys(fxRates).length > 0 || readFxCache();
-  if (hadData) {
-    updateFxResult();
-    setFxStatus("正在背景更新；目前先顯示上次成功取得的資料。", "loading");
-  } else {
-    const result = $("fx-result");
-    if (result) result.textContent = "載入中…";
-    setFxStatus("正在取得最新匯率資料…", "loading");
-  }
-
+  const detail = $("fx-rate-detail");
+  const result = $("fx-result");
+  if (detail) detail.textContent = "正在更新匯率資料…";
+  if (result) result.textContent = "載入中…";
   try {
-    let newRates, newSource;
-    try {
-      const csv = await fetchBotCsv();
-      const lines = csv.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
-      const map = Object.fromEntries(Object.entries(FX_CURRENCY_NAMES).map(([k,v]) => [v,k]));
-      const parsed = {};
-      for (const line of lines.slice(1)) {
-        const cols = line.split(",");
-        const code = (cols[0] || "").trim();
-        const key = map[code];
-        if (!key) continue;
-        const nums = cols.slice(1,5).map(v => Number.parseFloat(v));
-        if (nums.some(v => !Number.isFinite(v) || v <= 0)) continue;
-        parsed[key] = {cashBuy:nums[0],cashSell:nums[1],spotBuy:nums[2],spotSell:nums[3],reference:false};
-      }
-      if (Object.keys(parsed).length < 5) throw new Error("台銀資料缺少所需幣別");
-      newRates = parsed;
-      newSource = "台灣銀行牌告匯率";
-    } catch (botError) {
-      console.warn("BOT rate fetch failed; trying public reference rates", botError);
-      newRates = await fetchReferenceRates();
-      newSource = "公開市場參考匯率（非台灣銀行牌告；買賣價差及現鈔加減碼未計）";
+    const csv = await fetchBotCsv();
+    const lines = csv.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+    const map = Object.fromEntries(Object.entries(FX_CURRENCY_NAMES).map(([k,v]) => [v,k]));
+    const parsed = {};
+    for (const line of lines.slice(1)) {
+      const cols = line.split(",");
+      const code = (cols[0] || "").trim();
+      const key = map[code];
+      if (!key) continue;
+      const nums = cols.slice(1,5).map(v => Number.parseFloat(v));
+      if (nums.some(v => !Number.isFinite(v))) continue;
+      parsed[key] = {cashBuy:nums[0], cashSell:nums[1], spotBuy:nums[2], spotSell:nums[3], reference:false};
     }
-
-    // Only replace the currently displayed values after a complete successful response.
-    fxRates = newRates;
-    fxSourceLabel = newSource;
+    if (Object.keys(parsed).length < 5) throw new Error("台銀資料缺少所需幣別");
+    fxRates = parsed;
+    fxSourceLabel = "台灣銀行牌告匯率";
     fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
-    saveFxCache();
     updateFxResult();
-    setFxStatus("匯率更新成功。", "success");
-  } catch (err) {
-    console.warn("FX rate update failed; keeping last successful data", err);
-    if (hadData && Object.keys(fxRates).length) {
+  } catch (botError) {
+    console.warn("BOT rate fetch failed; trying public reference rates", botError);
+    try {
+      fxRates = await fetchReferenceRates();
+      fxSourceLabel = "公開市場參考匯率（非台灣銀行牌告；買賣價差及現鈔加減碼未計）";
+      fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
       updateFxResult();
-      setFxStatus("更新失敗，已保留上次成功資料；請留意最後更新時間。", "error");
-    } else {
-      const detail = $("fx-rate-detail");
-      const result = $("fx-result");
+    } catch (fallbackError) {
+      fxRates = {};
       if (detail) detail.textContent = "目前無法取得匯率資料，請稍後重試。可至台灣銀行官網查詢最新牌告匯率。";
       if (result) result.textContent = "暫無匯率";
-      setFxStatus("目前沒有可用的匯率快取，請稍後重試。", "error");
+      console.warn("FX reference rate fetch failed", fallbackError);
     }
-  } finally {
-    fxIsRefreshing = false;
-    if (button) { button.disabled = false; button.textContent = "更新匯率"; }
   }
 }
 
@@ -1381,3 +1414,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     showToast("雲端資料讀取失敗，暫時顯示本機預設資料。請檢查網路或 Supabase 設定。", 5000);
   }
 });
+
+/* ---------- Back to top ---------- */
+const backToTopButton = document.getElementById("back-to-top");
+window.addEventListener("scroll",()=>backToTopButton?.classList.toggle("is-visible",window.scrollY>360),{passive:true});
+backToTopButton?.addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));

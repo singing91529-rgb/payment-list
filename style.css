@@ -1110,3 +1110,10 @@ main{padding-bottom:20px}
 .fx-card input[readonly]{opacity:.82;cursor:not-allowed}
 .fx-card input.fx-output-field{background:var(--glass-bg,rgba(100,130,180,.12));border-style:dashed}
 @media(max-width:520px){.fx-direction-row .btn{width:100%}}
+
+/* FX refresh status */
+#fx-fetch-status{font-size:.88rem;line-height:1.5;min-height:1.3em;margin-top:-4px}
+#fx-fetch-status[data-state="success"]{color:#16834a!important}
+#fx-fetch-status[data-state="error"]{color:#c04444!important}
+#fx-fetch-status[data-state="loading"]{color:var(--muted)!important}
+#fx-refresh:disabled{opacity:.65;cursor:wait}

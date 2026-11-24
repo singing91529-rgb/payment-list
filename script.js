@@ -1147,18 +1147,54 @@ $("friend-form")?.addEventListener("submit",async e=>{
 let fxRates = {};
 let fxUpdatedAt = "";
 let fxSourceLabel = "";
+let fxIsRefreshing = false;
+const FX_CACHE_KEY = "paymentHubFxRatesCacheV1";
 const FX_CURRENCY_NAMES = {USD:"美金",JPY:"日圓",KRW:"韓元",AUD:"澳幣",CNY:"人民幣"};
+
+function setFxStatus(message, state = "info") {
+  const el = $("fx-fetch-status");
+  if (!el) return;
+  el.textContent = message;
+  el.dataset.state = state;
+}
+
+function readFxCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(FX_CACHE_KEY) || "null");
+    if (!cached || !cached.rates || !cached.updatedAt || !cached.sourceLabel) return false;
+    const valid = Object.keys(FX_CURRENCY_NAMES).every(code => {
+      const r = cached.rates[code];
+      return r && [r.cashBuy,r.cashSell,r.spotBuy,r.spotSell].every(v => Number.isFinite(Number(v)) && Number(v) > 0);
+    });
+    if (!valid) return false;
+    fxRates = cached.rates;
+    fxUpdatedAt = cached.updatedAt;
+    fxSourceLabel = cached.sourceLabel;
+    return true;
+  } catch (_) { return false; }
+}
+
+function saveFxCache() {
+  try {
+    localStorage.setItem(FX_CACHE_KEY, JSON.stringify({rates:fxRates,updatedAt:fxUpdatedAt,sourceLabel:fxSourceLabel}));
+  } catch (err) { console.warn("Unable to save FX cache", err); }
+}
+
+async function fetchWithTimeout(url, timeoutMs = 4500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {cache:"no-store", signal:controller.signal});
+  } finally { clearTimeout(timer); }
+}
 
 async function fetchBotCsv() {
   const target = "https://rate.bot.com.tw/xrt/flcsv/0/day";
-  const urls = [
-    target,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
-  ];
+  const urls = [target, `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`];
   let lastError;
   for (const url of urls) {
     try {
-      const res = await fetch(url, {cache:"no-store"});
+      const res = await fetchWithTimeout(url, 3000);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const csv = await res.text();
       if (!csv.includes("日圓") && !csv.includes("美金")) throw new Error("回傳內容不是台銀匯率 CSV");
@@ -1169,7 +1205,7 @@ async function fetchBotCsv() {
 }
 
 async function fetchReferenceRates() {
-  const res = await fetch("https://open.er-api.com/v6/latest/TWD", {cache:"no-store"});
+  const res = await fetchWithTimeout("https://open.er-api.com/v6/latest/TWD", 3000);
   if (!res.ok) throw new Error(`參考匯率服務 HTTP ${res.status}`);
   const data = await res.json();
   if (data.result !== "success" || !data.rates) throw new Error("參考匯率資料格式錯誤");
@@ -1177,51 +1213,75 @@ async function fetchReferenceRates() {
   for (const code of Object.keys(FX_CURRENCY_NAMES)) {
     const perTwd = Number(data.rates[code]);
     if (!Number.isFinite(perTwd) || perTwd <= 0) continue;
-    // Public market reference rate only; not a bank buy/sell quote.
     const twdPerUnit = 1 / perTwd;
-    out[code] = {cashBuy:twdPerUnit, cashSell:twdPerUnit, spotBuy:twdPerUnit, spotSell:twdPerUnit, reference:true};
+    out[code] = {cashBuy:twdPerUnit,cashSell:twdPerUnit,spotBuy:twdPerUnit,spotSell:twdPerUnit,reference:true};
   }
   if (!Object.keys(out).length) throw new Error("沒有可用的參考匯率");
   return out;
 }
 
 async function loadFxRates() {
-  const detail = $("fx-rate-detail");
-  const result = $("fx-result");
-  if (detail) detail.textContent = "正在更新匯率資料…";
-  if (result) result.textContent = "載入中…";
-  try {
-    const csv = await fetchBotCsv();
-    const lines = csv.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
-    const map = Object.fromEntries(Object.entries(FX_CURRENCY_NAMES).map(([k,v]) => [v,k]));
-    const parsed = {};
-    for (const line of lines.slice(1)) {
-      const cols = line.split(",");
-      const code = (cols[0] || "").trim();
-      const key = map[code];
-      if (!key) continue;
-      const nums = cols.slice(1,5).map(v => Number.parseFloat(v));
-      if (nums.some(v => !Number.isFinite(v))) continue;
-      parsed[key] = {cashBuy:nums[0], cashSell:nums[1], spotBuy:nums[2], spotSell:nums[3], reference:false};
-    }
-    if (Object.keys(parsed).length < 5) throw new Error("台銀資料缺少所需幣別");
-    fxRates = parsed;
-    fxSourceLabel = "台灣銀行牌告匯率";
-    fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
+  if (fxIsRefreshing) return;
+  fxIsRefreshing = true;
+  const button = $("fx-refresh");
+  if (button) { button.disabled = true; button.textContent = "更新中…"; }
+  const hadData = Object.keys(fxRates).length > 0 || readFxCache();
+  if (hadData) {
     updateFxResult();
-  } catch (botError) {
-    console.warn("BOT rate fetch failed; trying public reference rates", botError);
+    setFxStatus("正在背景更新；目前先顯示上次成功取得的資料。", "loading");
+  } else {
+    const result = $("fx-result");
+    if (result) result.textContent = "載入中…";
+    setFxStatus("正在取得最新匯率資料…", "loading");
+  }
+
+  try {
+    let newRates, newSource;
     try {
-      fxRates = await fetchReferenceRates();
-      fxSourceLabel = "公開市場參考匯率（非台灣銀行牌告；買賣價差及現鈔加減碼未計）";
-      fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
+      const csv = await fetchBotCsv();
+      const lines = csv.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+      const map = Object.fromEntries(Object.entries(FX_CURRENCY_NAMES).map(([k,v]) => [v,k]));
+      const parsed = {};
+      for (const line of lines.slice(1)) {
+        const cols = line.split(",");
+        const code = (cols[0] || "").trim();
+        const key = map[code];
+        if (!key) continue;
+        const nums = cols.slice(1,5).map(v => Number.parseFloat(v));
+        if (nums.some(v => !Number.isFinite(v) || v <= 0)) continue;
+        parsed[key] = {cashBuy:nums[0],cashSell:nums[1],spotBuy:nums[2],spotSell:nums[3],reference:false};
+      }
+      if (Object.keys(parsed).length < 5) throw new Error("台銀資料缺少所需幣別");
+      newRates = parsed;
+      newSource = "台灣銀行牌告匯率";
+    } catch (botError) {
+      console.warn("BOT rate fetch failed; trying public reference rates", botError);
+      newRates = await fetchReferenceRates();
+      newSource = "公開市場參考匯率（非台灣銀行牌告；買賣價差及現鈔加減碼未計）";
+    }
+
+    // Only replace the currently displayed values after a complete successful response.
+    fxRates = newRates;
+    fxSourceLabel = newSource;
+    fxUpdatedAt = new Date().toLocaleString("zh-TW", {timeZone:"Asia/Taipei"});
+    saveFxCache();
+    updateFxResult();
+    setFxStatus("匯率更新成功。", "success");
+  } catch (err) {
+    console.warn("FX rate update failed; keeping last successful data", err);
+    if (hadData && Object.keys(fxRates).length) {
       updateFxResult();
-    } catch (fallbackError) {
-      fxRates = {};
+      setFxStatus("更新失敗，已保留上次成功資料；請留意最後更新時間。", "error");
+    } else {
+      const detail = $("fx-rate-detail");
+      const result = $("fx-result");
       if (detail) detail.textContent = "目前無法取得匯率資料，請稍後重試。可至台灣銀行官網查詢最新牌告匯率。";
       if (result) result.textContent = "暫無匯率";
-      console.warn("FX reference rate fetch failed", fallbackError);
+      setFxStatus("目前沒有可用的匯率快取，請稍後重試。", "error");
     }
+  } finally {
+    fxIsRefreshing = false;
+    if (button) { button.disabled = false; button.textContent = "更新匯率"; }
   }
 }
 

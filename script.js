@@ -1102,7 +1102,7 @@ const DEBT_TABLE = "debt_reminders";
 let debtRows = [];
 let debtFilter = "all";
 async function submitDebtReminder(payload) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-debt-reminder`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/clever-action`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
     body: JSON.stringify(payload)

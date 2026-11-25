@@ -1155,16 +1155,64 @@ async function updateDebtStatus(row) {
   try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({status:next,updated_at:new Date().toISOString()})},true); await loadDebtRows(); showToast(next === "paid" ? "已標記為還款完成。" : "已改回待還款。"); }
   catch(e){showToast(e.message || "更新失敗。");}
 }
-async function editDebtRecord(row) {
-  const sender = prompt("通知人姓名",row.sender_name); if (sender === null) return;
-  const subject = prompt("欠款事項",row.subject); if (subject === null) return;
-  const amountText = prompt("欠款金額（NT$）",String(row.amount)); if (amountText === null) return;
-  const amount = Number(amountText);
-  if (!sender.trim() || !subject.trim() || !Number.isFinite(amount) || amount <= 0) { showToast("請輸入有效的姓名、事項及金額。"); return; }
-  const note = prompt("補充說明（可留空）",row.note || ""); if (note === null) return;
-  try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({sender_name:sender.trim(),subject:subject.trim(),amount,note:note.trim(),updated_at:new Date().toISOString()})},true); await loadDebtRows(); showToast("欠款提醒已更新。"); }
-  catch(e){showToast(e.message || "更新失敗。");}
+let editingDebtId = null;
+function closeDebtEditModal() {
+  const modal = $("debt-edit-modal");
+  if (!modal) return;
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+  editingDebtId = null;
 }
+function editDebtRecord(row) {
+  editingDebtId = row.id;
+  $("debt-edit-sender").value = row.sender_name || "";
+  $("debt-edit-subject").value = row.subject || "";
+  $("debt-edit-amount").value = String(row.amount ?? "");
+  $("debt-edit-note").value = row.note || "";
+  $("debt-edit-error").textContent = "";
+  const modal = $("debt-edit-modal");
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => $("debt-edit-sender").focus());
+}
+$("debt-edit-form")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!editingDebtId) return;
+  const sender = $("debt-edit-sender").value.trim();
+  const subject = $("debt-edit-subject").value.trim();
+  const amount = Number($("debt-edit-amount").value);
+  const note = $("debt-edit-note").value.trim();
+  const error = $("debt-edit-error");
+  if (!sender || !subject || !Number.isFinite(amount) || amount <= 0 || amount > 1000000000) {
+    error.textContent = "請確認提交人、欠款項目及金額皆填寫正確。";
+    return;
+  }
+  if (sender.length > 80 || subject.length > 200 || note.length > 1000) {
+    error.textContent = "欄位內容超過字數限制。";
+    return;
+  }
+  const save = $("debt-edit-save");
+  save.disabled = true;
+  save.textContent = "儲存中…";
+  error.textContent = "";
+  try {
+    await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(editingDebtId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ sender_name: sender, subject, amount, note, updated_at: new Date().toISOString() })
+    }, true);
+    closeDebtEditModal();
+    await loadDebtRows();
+    showToast("欠款提醒已更新。");
+  } catch (e) {
+    error.textContent = e.message || "更新失敗，請稍後再試。";
+  } finally {
+    save.disabled = false;
+    save.textContent = "一次儲存修改";
+  }
+});
+document.querySelectorAll("[data-debt-edit-close]").forEach(button => button.addEventListener("click", closeDebtEditModal));
+document.addEventListener("keydown", event => { if (event.key === "Escape" && $("debt-edit-modal")?.classList.contains("is-open")) closeDebtEditModal(); });
 async function deleteDebtRecord(row) {
   if (!confirm(`確定刪除「${row.sender_name}－${row.subject}」這筆提醒？`)) return;
   try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"DELETE"},true); await loadDebtRows(); showToast("欠款提醒已刪除。"); }

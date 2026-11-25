@@ -279,6 +279,25 @@
     </div>
   </section>
 
+  <!-- Debt edit modal -->
+  <div id="debt-edit-modal" class="debt-edit-modal" aria-hidden="true">
+    <div class="debt-edit-overlay" data-debt-edit-close></div>
+    <section class="debt-edit-panel" role="dialog" aria-modal="true" aria-labelledby="debt-edit-title">
+      <div class="debt-edit-heading">
+        <div><h3 id="debt-edit-title">編輯欠款提醒</h3><p>可一次修改以下四個欄位</p></div>
+        <button type="button" class="debt-edit-x" data-debt-edit-close aria-label="關閉">✕</button>
+      </div>
+      <form id="debt-edit-form" class="debt-edit-form">
+        <label>提交人<input id="debt-edit-sender" maxlength="80" required></label>
+        <label>欠款項目<input id="debt-edit-subject" maxlength="200" required></label>
+        <label>欠款金額（NT$）<input id="debt-edit-amount" type="number" min="1" max="1000000000" step="1" required></label>
+        <label>備註（選填）<textarea id="debt-edit-note" rows="3" maxlength="1000"></textarea></label>
+        <p id="debt-edit-error" class="debt-edit-error" role="alert"></p>
+        <div class="debt-edit-actions"><button type="button" class="btn btn-secondary" data-debt-edit-close>取消</button><button id="debt-edit-save" type="submit" class="btn">一次儲存修改</button></div>
+      </form>
+    </section>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 

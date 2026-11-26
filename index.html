@@ -161,6 +161,35 @@
         </form>
       </div>
       <div id="debt-admin-area" hidden>
+        <div class="debt-management-tabs" role="group" aria-label="欠款管理分類">
+          <button type="button" class="is-active" data-debt-view="owed-to-me">別人欠我的</button>
+          <button type="button" data-debt-view="i-owe">我欠別人的提醒</button>
+        </div>
+        <section id="receivable-admin-area" class="receivable-admin-area">
+          <div class="debt-admin-heading"><div><h3>別人欠我的</h3><span class="admin-only-label">🔒 管理者專屬</span></div><button id="receivable-add" class="btn" type="button">＋ 新增欠款</button></div>
+          <div class="debt-stats receivable-stats">
+            <article class="debt-stat"><span>尚未收回筆數</span><strong id="receivable-pending-count">0</strong></article>
+            <article class="debt-stat"><span>尚未收回金額</span><strong id="receivable-pending-total">NT$ 0</strong></article>
+            <article class="debt-stat"><span>已收回筆數</span><strong id="receivable-paid-count">0</strong></article>
+          </div>
+          <form id="receivable-form" class="tool-card receivable-form" hidden>
+            <h4 id="receivable-form-title">新增他人欠款</h4>
+            <input id="receivable-id" type="hidden">
+            <div class="tool-form-grid">
+              <label>欠款人姓名／稱呼<input id="receivable-person" required maxlength="80" placeholder="例如：王小明"></label>
+              <label>欠款項目<input id="receivable-subject" required maxlength="160" placeholder="例如：代墊聚餐費"></label>
+              <label>欠款金額（NT$）<input id="receivable-amount" type="number" required min="1" max="99999999" step="1"></label>
+              <label>欠款日期<input id="receivable-date" type="date" required></label>
+              <label>預計還款日（選填）<input id="receivable-due" type="date"></label>
+              <label class="wide">備註（選填）<textarea id="receivable-note" rows="2" maxlength="1000"></textarea></label>
+            </div>
+            <div class="editor-actions"><button id="receivable-save" class="btn" type="submit">儲存紀錄</button><button id="receivable-cancel" class="btn btn-secondary" type="button">取消</button></div>
+            <p id="receivable-error" class="debt-edit-error" role="alert"></p>
+          </form>
+          <div class="debt-filters" role="group" aria-label="收款狀態篩選"><button class="is-active" data-receivable-filter="all" type="button">全部</button><button data-receivable-filter="pending" type="button">未收回</button><button data-receivable-filter="paid" type="button">已收回</button></div>
+          <div id="receivable-record-list" class="debt-record-list"><p class="muted">尚無他人欠款紀錄。</p></div>
+        </section>
+        <section id="reminder-admin-area" hidden>
         <div class="debt-admin-heading"><div><h3>欠款提醒管理</h3><span class="admin-only-label">🔒 管理者專屬</span></div><button id="debt-reload" class="btn btn-secondary" type="button">重新整理</button></div>
         <div class="debt-stats">
           <article class="debt-stat"><span>待處理筆數</span><strong id="debt-pending-count">0</strong></article>
@@ -169,6 +198,7 @@
         </div>
         <div class="debt-filters" role="group" aria-label="欠款狀態篩選"><button class="is-active" data-debt-filter="all" type="button">全部</button><button data-debt-filter="pending" type="button">待還款</button><button data-debt-filter="paid" type="button">已還款</button></div>
         <div id="debt-record-list" class="debt-record-list"><p class="muted">登入管理帳號後即可查看提醒紀錄。</p></div>
+        </section>
       </div>
     </section>
 
@@ -271,7 +301,7 @@
         <div class="history-heading"><h3>操作歷史</h3><button id="clear-history" class="btn btn-secondary" type="button">清除紀錄</button></div>
         <div id="admin-history-list" class="history-list"></div>
       </section>
-      <div class="admin-lists">
+      <div id="admin-payment-lists" class="admin-lists">
         <div><h3>Banks</h3><div id="admin-banks-list" class="admin-list"></div></div>
         <div><h3>E-wallets</h3><div id="admin-wallets-list" class="admin-list"></div></div>
       </div>

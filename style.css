@@ -1128,3 +1128,16 @@ main{padding-bottom:20px}
 .debt-edit-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.debt-edit-heading h3{margin:0 0 5px;font-size:1.25rem}.debt-edit-heading p{margin:0;color:var(--muted,#788397);font-size:.9rem}.debt-edit-x{width:36px;height:36px;border:0;border-radius:50%;background:var(--glass-bg,rgba(120,130,150,.12));color:inherit;font-size:18px;cursor:pointer}
 .debt-edit-form{display:grid;gap:15px}.debt-edit-form label{display:grid;gap:7px;font-weight:700}.debt-edit-form input,.debt-edit-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--glass-border,rgba(120,130,150,.35));border-radius:12px;padding:12px 14px;background:var(--card-bg,#fff);color:var(--text,#263247);font:inherit}.debt-edit-form input:focus,.debt-edit-form textarea:focus{outline:2px solid rgba(40,127,199,.3);border-color:#287fc7}.debt-edit-error{min-height:1.2em;margin:0;color:#dc3545;font-size:.9rem}.debt-edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:4px}.debt-edit-actions button{min-width:112px}.debt-edit-actions button:disabled{opacity:.6;cursor:wait}
 @media(max-width:520px){.debt-edit-panel{padding:19px;border-radius:18px}.debt-edit-actions{flex-direction:column-reverse}.debt-edit-actions button{width:100%}}
+
+/* Debt receivables and shared admin-page visibility */
+.debt-management-tabs { display:flex; gap:8px; margin:18px 0; padding:5px; border-radius:13px; background:var(--surface-2,rgba(120,140,180,.14)); }
+.debt-management-tabs button { flex:1; border:0; border-radius:10px; padding:11px 14px; background:transparent; color:var(--muted); font:inherit; font-weight:750; cursor:pointer; }
+.debt-management-tabs button.is-active { background:var(--accent,#3185c8); color:#fff; box-shadow:0 4px 12px rgba(40,120,200,.18); }
+.receivable-admin-area { margin-top:8px; }
+.receivable-form { margin:16px 0; }
+.receivable-form h4 { margin:0 0 14px; }
+.receivable-form .tool-form-grid { margin-top:12px; }
+.debt-status.overdue { background:rgba(220,70,70,.14); color:#d84949; }
+:root[data-theme="light"] .debt-status.overdue { background:#ffebeb; color:#c52d38; }
+#admin-payment-lists[hidden], #receivable-admin-area[hidden], #reminder-admin-area[hidden] { display:none !important; }
+@media(max-width:600px) { .debt-management-tabs { flex-direction:column; } }

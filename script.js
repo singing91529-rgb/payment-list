@@ -834,6 +834,8 @@ function enterAdminMode() {
   adminPanel.hidden = false;
   adminToggle.textContent = "Admin Mode ✓";
   renderAdminLists();
+  const activePage = document.querySelector("[data-nav-page].is-active")?.dataset.navPage || "home";
+  $("admin-payment-lists").hidden = activePage !== "home";
   if (friendViewerSession) { $("friend-admin-editor").hidden = false; renderFriendRows(); }
   if (document.getElementById("debt-tool") && !document.getElementById("debt-tool").hidden) { $("debt-admin-area").hidden = false; loadDebtRows().catch(e=>showToast(e.message)); }
   adminPanel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1121,6 +1123,7 @@ async function loadDebtRows() {
   if (!adminMode || !supabaseSession || !await ensureSessionFresh()) throw new Error("請先登入管理帳號。");
   debtRows = await sbRequest(`/rest/v1/${DEBT_TABLE}?select=*&order=created_at.desc`, {}, true);
   renderDebtAdmin();
+  await loadReceivables();
 }
 function renderDebtAdmin() {
   const pending = debtRows.filter(row => row.status === "pending");
@@ -1150,6 +1153,94 @@ function renderDebtAdmin() {
     actions.append(toggle,edit,del); card.append(actions); list.append(card);
   });
 }
+/* ---------- Admin receivables: people who owe the administrator ---------- */
+const RECEIVABLE_TABLE = "debt_receivables";
+let receivableRows = [];
+let receivableFilter = "all";
+let debtAdminView = "owed-to-me";
+function localDateString(date = new Date()) {
+  const y = date.getFullYear(); const m = String(date.getMonth()+1).padStart(2,"0"); const d = String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+function dateOnlyDiff(from, to = localDateString()) {
+  if (!from) return 0;
+  const a = new Date(`${from}T00:00:00`); const b = new Date(`${to}T00:00:00`);
+  return Math.floor((b-a)/86400000);
+}
+function formatDateOnly(value) {
+  if (!value) return "未設定";
+  const [y,m,d] = String(value).slice(0,10).split("-");
+  return `${y}/${m}/${d}`;
+}
+async function loadReceivables() {
+  if (!adminMode || !supabaseSession || !await ensureSessionFresh()) return;
+  receivableRows = await sbRequest(`/rest/v1/${RECEIVABLE_TABLE}?select=*&order=borrowed_at.desc,created_at.desc`, {}, true);
+  renderReceivables();
+}
+function renderReceivables() {
+  const pending = receivableRows.filter(row => row.status !== "paid");
+  const paid = receivableRows.filter(row => row.status === "paid");
+  $("receivable-pending-count").textContent = pending.length;
+  $("receivable-pending-total").textContent = moneyTwd(pending.reduce((sum,row)=>sum+Number(row.amount||0),0));
+  $("receivable-paid-count").textContent = paid.length;
+  const list = $("receivable-record-list"); list.replaceChildren();
+  const rows = receivableRows.filter(row => receivableFilter === "all" || (receivableFilter === "paid" ? row.status === "paid" : row.status !== "paid"));
+  if (!rows.length) { list.append(createEl("p",{class:"muted"},"目前沒有符合條件的紀錄。")); return; }
+  rows.forEach(row => {
+    const card = createEl("article",{class:"debt-record"});
+    const overdue = row.status !== "paid" && row.due_date && dateOnlyDiff(row.due_date) > 0;
+    const dueToday = row.status !== "paid" && row.due_date && dateOnlyDiff(row.due_date) === 0;
+    const duration = Math.max(0,dateOnlyDiff(row.borrowed_at));
+    const statusText = row.status === "paid" ? "✓ 已收回" : overdue ? `逾期 ${dateOnlyDiff(row.due_date)} 天` : dueToday ? "今日到期" : "未收回";
+    const top = createEl("div",{class:"debt-record-top"},createEl("strong",{},row.person_name),createEl("span",{class:`debt-status${row.status === "paid" ? " paid" : overdue ? " overdue" : ""}`},statusText));
+    card.append(top,createEl("div",{},row.subject),createEl("div",{class:"debt-record-amount"},moneyTwd(row.amount)));
+    card.append(createEl("div",{class:"debt-record-meta"},`欠款日期：${formatDateOnly(row.borrowed_at)}｜已經過 ${duration} 天`));
+    card.append(createEl("div",{class:"debt-record-meta"},`預計還款：${formatDateOnly(row.due_date)}`));
+    if(row.note) card.append(createEl("p",{class:"muted"},row.note));
+    const actions=createEl("div",{class:"debt-record-actions"});
+    actions.append(createEl("button",{type:"button",onclick:()=>toggleReceivableStatus(row)},row.status === "paid" ? "改回未收回" : "標記已收回"));
+    actions.append(createEl("button",{type:"button",onclick:()=>editReceivable(row)},"編輯"));
+    actions.append(createEl("button",{type:"button",class:"danger",onclick:()=>deleteReceivable(row)},"刪除"));
+    card.append(actions); list.append(card);
+  });
+}
+function resetReceivableForm() {
+  $("receivable-form").reset(); $("receivable-id").value=""; $("receivable-date").value=localDateString();
+  $("receivable-form-title").textContent="新增他人欠款"; $("receivable-error").textContent=""; $("receivable-form").hidden=true;
+}
+function editReceivable(row) {
+  $("receivable-id").value=row.id; $("receivable-person").value=row.person_name||""; $("receivable-subject").value=row.subject||"";
+  $("receivable-amount").value=String(row.amount||""); $("receivable-date").value=row.borrowed_at||localDateString();
+  $("receivable-due").value=row.due_date||""; $("receivable-note").value=row.note||"";
+  $("receivable-form-title").textContent="編輯他人欠款"; $("receivable-error").textContent=""; $("receivable-form").hidden=false;
+  $("receivable-form").scrollIntoView({behavior:"smooth",block:"center"});
+}
+async function toggleReceivableStatus(row) {
+  const next=row.status === "paid" ? "pending" : "paid";
+  try { await sbRequest(`/rest/v1/${RECEIVABLE_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({status:next,updated_at:new Date().toISOString()})},true); await loadReceivables(); showToast(next === "paid" ? "已標記為收款完成。" : "已改回未收回。"); }
+  catch(e){showToast(e.message||"更新失敗。");}
+}
+async function deleteReceivable(row) {
+  if(!confirm(`確定刪除「${row.person_name}－${row.subject}」這筆紀錄？`)) return;
+  try { await sbRequest(`/rest/v1/${RECEIVABLE_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"DELETE"},true); await loadReceivables(); showToast("他人欠款紀錄已刪除。"); }
+  catch(e){showToast(e.message||"刪除失敗。");}
+}
+$("receivable-add")?.addEventListener("click",()=>{resetReceivableForm();$("receivable-form").hidden=false;$("receivable-form").scrollIntoView({behavior:"smooth",block:"center"});});
+$("receivable-cancel")?.addEventListener("click",resetReceivableForm);
+$("receivable-form")?.addEventListener("submit",async e=>{
+  e.preventDefault(); if(!adminMode || !supabaseSession){showToast("請先登入管理帳號。");return;}
+  const id=$("receivable-id").value;
+  const payload={person_name:$("receivable-person").value.trim(),subject:$("receivable-subject").value.trim(),amount:Number($("receivable-amount").value),borrowed_at:$("receivable-date").value,due_date:$("receivable-due").value||null,note:$("receivable-note").value.trim(),updated_at:new Date().toISOString()};
+  if(!payload.person_name||!payload.subject||!Number.isFinite(payload.amount)||payload.amount<=0||!payload.borrowed_at){$("receivable-error").textContent="請確認姓名、項目、金額及欠款日期皆已正確填寫。";return;}
+  if(payload.due_date && payload.due_date < payload.borrowed_at){$("receivable-error").textContent="預計還款日不可早於欠款日期。";return;}
+  const save=$("receivable-save");save.disabled=true;save.textContent="儲存中…";
+  try { await sbRequest(`/rest/v1/${RECEIVABLE_TABLE}${id?`?id=eq.${encodeURIComponent(id)}`:""}`,{method:id?"PATCH":"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)},true); resetReceivableForm(); await loadReceivables(); showToast(id?"欠款紀錄已更新。":"已新增他人欠款紀錄。"); }
+  catch(err){$("receivable-error").textContent=err.message||"儲存失敗，請確認已執行資料庫更新 SQL。";}
+  finally{save.disabled=false;save.textContent="儲存紀錄";}
+});
+document.querySelectorAll("[data-receivable-filter]").forEach(button=>button.addEventListener("click",()=>{receivableFilter=button.dataset.receivableFilter;document.querySelectorAll("[data-receivable-filter]").forEach(b=>b.classList.toggle("is-active",b===button));renderReceivables();}));
+document.querySelectorAll("[data-debt-view]").forEach(button=>button.addEventListener("click",()=>{debtAdminView=button.dataset.debtView;document.querySelectorAll("[data-debt-view]").forEach(b=>b.classList.toggle("is-active",b===button));$("receivable-admin-area").hidden=debtAdminView!=="owed-to-me";$("reminder-admin-area").hidden=debtAdminView!=="i-owe";}));
+
 async function updateDebtStatus(row) {
   const next = row.status === "paid" ? "pending" : "paid";
   try { await sbRequest(`/rest/v1/${DEBT_TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({status:next,updated_at:new Date().toISOString()})},true); await loadDebtRows(); showToast(next === "paid" ? "已標記為還款完成。" : "已改回待還款。"); }
@@ -1241,6 +1332,7 @@ function setActiveAppNav(page) {
 }
 function openTool(name) {
   setActiveAppNav(name);
+  if (adminMode && $("admin-payment-lists")) $("admin-payment-lists").hidden = name !== "home";
   document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
   document.getElementById(`${name}-tool`).hidden=false;
   if(name==="friends" && (friendViewerSession || adminMode)){ loadFriendRows().then(()=>{ $("friend-login").hidden=true; $("friend-content").hidden=false; $("friend-admin-editor").hidden=!adminMode; }).catch(err=>{ if(!adminMode) saveFriendViewerSession(null); console.warn(err); }); }
@@ -1254,6 +1346,7 @@ function openTool(name) {
   document.getElementById(`${name}-tool`).scrollIntoView({behavior:"smooth",block:"start"});
 }
 function closeTools() {
+  if (adminMode && $("admin-payment-lists")) $("admin-payment-lists").hidden = false;
   document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
   document.querySelector(".sections").hidden=false;
   document.querySelector(".search-panel").hidden=false;

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment Hub</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <h1 class="site-title">Payment Hub</h1>
+        <p class="site-subtitle">Choose Your Payment Method</p>
+        <div class="live-clock" aria-label="Current date and time in Taiwan">
+          <span class="live-clock-dot" aria-hidden="true"></span>
+          <span id="live-date">Loading date…</span>
+          <span class="live-clock-divider" aria-hidden="true">·</span>
+          <time id="live-time">--:--:--</time>
+          <span class="live-clock-zone">台灣時間</span>
+        </div>
+      </div>
+      <div class="header-tools">
+        <button id="theme-toggle" class="btn btn-secondary theme-toggle" type="button" aria-label="Switch color theme">☀ 淺色</button>
+        <button id="admin-toggle" class="btn admin-toggle" type="button">Admin Mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="overview-strip container" aria-label="Payment overview">
+      <div class="overview-card"><span>銀行帳戶</span><strong data-count="bank-count">0</strong><small>Bank accounts</small></div>
+      <div class="overview-card"><span>電子支付</span><strong data-count="wallet-count">0</strong><small>E-wallets</small></div>
+      <div class="overview-card"><span>收藏項目</span><strong data-count="favorite-count">0</strong><small>Favorites</small></div>
+    </section>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-inner container">
+        <div class="hero-copy">
+          <p class="hero-eyebrow"><span class="eyebrow-dot"></span> YOUR PAYMENTS, IN ONE PLACE</p>
+          <h2 class="hero-title" id="hero-title">A simpler way to <span>move money.</span></h2>
+          <p class="hero-subtitle">Choose the payment method that works for you. Bank transfers, e-wallets, and digital assets—all in one clear, convenient hub.</p>
+          <div class="hero-highlights" aria-label="Available payment categories">
+            <span>Bank transfer</span>
+            <span>E-wallet</span>
+            <span>Digital assets</span>
+          </div>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <img class="hero-illustration" src="images/images_hero-illustration.svg" alt="">
+          <div class="hero-orb hero-orb-blue"></div>
+          <div class="hero-orb hero-orb-purple"></div>
+          <div class="hero-orb hero-orb-cyan"></div>
+
+          <div class="visual-payment-card">
+            <div class="visual-card-top">
+              <span class="visual-mark"><i></i><i></i><i></i><i></i></span>
+              <svg class="visual-contactless" viewBox="0 0 24 24" fill="none">
+                <path d="M8.5 8.5a5 5 0 0 1 0 7M12 5a10 10 0 0 1 0 14M5 12h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span class="visual-card-label">PAYMENT HUB</span>
+            <strong>Pay your way.</strong>
+            <div class="visual-card-bottom">
+              <span>Bank transfer</span>
+              <span class="visual-card-chip"></span>
+            </div>
+          </div>
+
+          <div class="visual-qr-card">
+            <svg class="visual-qr" viewBox="0 0 64 64" fill="none">
+              <rect width="64" height="64" rx="8" fill="white"/>
+              <path fill="#111827" d="M7 7h18v18H7zM11 11v10h10V11H11zm26-4h18v18H37zM41 11v10h10V11H41zM7 37h18v18H7zM11 41v10h10V41H11zm21-30h5v5h-5zm-5 10h5v5h-5zm10 0h5v5h-5zm10 5h5v5h-5zM27 27h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zM27 37h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-15 5h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-15 5h5v5h-5zm10 0h5v5h-5zm10 0h5v5h-5zm-20 5h5v5h-5zm10 0h5v5h-5z"/>
+            </svg>
+            <span>QR payments</span>
+          </div>
+
+          <div class="visual-status">
+            <span class="status-check">✓</span>
+            <span><strong>All in one place</strong><small>Simple. Secure. Ready.</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="search-panel container" role="search" aria-label="Search payment methods">
+      <div class="search-control">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/>
+          <path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <input id="payment-search" type="search" aria-label="Search bank names, bank codes, account numbers, and e-wallets" placeholder="Search bank, code, account, or wallet…" autocomplete="off">
+        <button id="clear-search" class="search-clear" type="button" aria-label="Clear search" hidden>×</button>
+      </div>
+    </section>
+    <p id="search-empty" class="search-empty container" role="status" hidden>No payment methods found. Try another name, bank code, or account number.</p>
+
+
+
+    <section id="friends-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">PRIVATE TRANSFER DIRECTORY</p><h2>親友轉帳資料</h2><p class="muted">輸入共用密碼後，查看親友提供的收款資訊。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div id="friend-login" class="tool-card">
+        <label>共用查詢密碼<input id="friend-password" type="password" autocomplete="current-password" placeholder="請輸入共用密碼"></label>
+        <button id="friend-login-btn" class="btn" type="button">驗證並進入</button>
+        <p id="friend-login-message" class="muted" role="status"></p>
+      </div>
+      <div id="friend-content" hidden>
+        <div class="tool-heading"><h3>親友名單</h3><button id="friend-logout" class="btn btn-secondary" type="button">登出</button></div>
+        <input id="friend-search" type="search" placeholder="搜尋姓名、銀行或備註" aria-label="搜尋親友資料">
+        <div id="friend-list" class="friend-list"></div>
+        <section id="friend-admin-editor" class="tool-card" hidden>
+          <h3 id="friend-form-title">新增親友帳戶</h3>
+          <form id="friend-form">
+            <input id="friend-id" type="hidden">
+            <div class="tool-form-grid">
+              <label>姓名／稱呼<input id="friend-name" required maxlength="80"></label>
+              <label>銀行名稱<input id="friend-bank" required maxlength="80"></label>
+              <label>銀行代碼<input id="friend-code" maxlength="12"></label>
+              <label>分行<input id="friend-branch" maxlength="80"></label>
+              <label class="wide">銀行帳號<input id="friend-account" required maxlength="80"></label>
+              <label class="wide">備註<input id="friend-note" maxlength="240"></label>
+            </div>
+            <label class="inline-check"><input id="friend-active" type="checkbox" checked> 顯示於親友名單</label>
+            <div class="editor-actions"><button class="btn" type="submit">儲存資料</button><button id="friend-form-reset" class="btn btn-secondary" type="button">清空表單</button></div>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <section id="fx-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">CURRENCY CONVERTER</p><h2>匯率換算</h2><p class="muted">台灣銀行牌告匯率；匯率以銀行實際公告為準。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div class="tool-card fx-card">
+        <label>匯率種類<select id="fx-type"><option value="spot">即期匯率</option><option value="cash">現金匯率</option></select></label>
+        <label>幣別<select id="fx-currency"><option value="JPY">日圓 JPY</option><option value="USD">美元 USD</option><option value="KRW">韓元 KRW</option><option value="AUD">澳幣 AUD</option><option value="CNY">人民幣 CNY</option></select></label>
+        <div class="fx-direction-row">
+          <span id="fx-direction-label">目前方向：外幣 → 台幣</span>
+          <button id="fx-direction-toggle" class="btn btn-secondary" type="button" aria-label="切換換算方向">切換換算方向</button>
+        </div>
+        <div class="tool-form-grid">
+          <label>外幣金額<input id="fx-foreign" type="number" min="0" step="any" value="10000" inputmode="decimal"></label>
+          <label>台幣金額<input id="fx-twd" type="number" min="0" step="any" placeholder="自動計算" inputmode="decimal" readonly></label>
+        </div>
+        <div class="fx-result"><span id="fx-result-label">外幣換算台幣</span><strong id="fx-result">載入匯率中…</strong></div>
+        <p id="fx-rate-detail" class="muted" role="status">資料來源：台灣銀行。載入中…</p>
+        <button id="fx-refresh" class="btn btn-secondary" type="button">更新匯率</button>
+      </div>
+    </section>
+
+    <section id="debt-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">PAYMENT REMINDER</p><h2>欠款提醒</h2><p class="muted">填寫款項資訊通知管理者；所有提醒紀錄僅管理帳號可查看。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div id="debt-public-card" class="tool-card debt-public-card">
+        <div class="debt-intro"><span class="debt-big-icon" aria-hidden="true">♧</span><div><h3>提醒我付款</h3><p class="muted">如果有款項需要我支付，請填寫以下資料。</p></div></div>
+        <form id="debt-submit-form" class="debt-form">
+          <label>通知人姓名 <span class="required-mark">*</span><input id="debt-sender" required maxlength="80" autocomplete="name" placeholder="例如：王小明"></label>
+          <label>欠款事項 <span class="required-mark">*</span><input id="debt-subject" required maxlength="160" placeholder="例如：上次聚餐餐費"></label>
+          <label>欠款金額（NT$） <span class="required-mark">*</span><input id="debt-amount" type="number" required min="1" max="99999999" step="1" inputmode="numeric" placeholder="請輸入金額"></label>
+          <label>補充說明（選填）<textarea id="debt-note" maxlength="1000" rows="3" placeholder="例如：11/20 聚餐時先幫忙墊付"></textarea></label>
+          <label class="debt-honeypot" aria-hidden="true">請勿填寫<input id="debt-website" tabindex="-1" autocomplete="off"></label>
+          <button id="debt-submit" class="btn debt-submit" type="submit">✉ 送出欠款提醒</button>
+          <p id="debt-submit-message" class="debt-message" role="status" aria-live="polite">送出後，系統會 Email 通知管理者；你無法查看其他欠款紀錄。</p>
+        </form>
+      </div>
+      <div id="debt-admin-area" hidden>
+        <div class="debt-management-tabs" role="group" aria-label="欠款管理分類">
+          <button type="button" class="is-active" data-debt-view="owed-to-me">別人欠我的</button>
+          <button type="button" data-debt-view="i-owe">我欠別人的提醒</button>
+        </div>
+        <section id="receivable-admin-area" class="receivable-admin-area">
+          <div class="debt-admin-heading"><div><h3>別人欠我的</h3><span class="admin-only-label">🔒 管理者專屬</span></div><button id="receivable-add" class="btn" type="button">＋ 新增欠款</button></div>
+          <div class="debt-stats receivable-stats">
+            <article class="debt-stat"><span>尚未收回筆數</span><strong id="receivable-pending-count">0</strong></article>
+            <article class="debt-stat"><span>尚未收回金額</span><strong id="receivable-pending-total">NT$ 0</strong></article>
+            <article class="debt-stat"><span>已收回筆數</span><strong id="receivable-paid-count">0</strong></article>
+          </div>
+          <form id="receivable-form" class="tool-card receivable-form" hidden>
+            <h4 id="receivable-form-title">新增他人欠款</h4>
+            <input id="receivable-id" type="hidden">
+            <div class="tool-form-grid">
+              <label>欠款人姓名／稱呼<input id="receivable-person" required maxlength="80" placeholder="例如：王小明"></label>
+              <label>欠款項目<input id="receivable-subject" required maxlength="160" placeholder="例如：代墊聚餐費"></label>
+              <label>欠款金額（NT$）<input id="receivable-amount" type="number" required min="1" max="99999999" step="1"></label>
+              <label>欠款日期<input id="receivable-date" type="date" required></label>
+              <label>預計還款日（選填）<input id="receivable-due" type="date"></label>
+              <label class="wide">備註（選填）<textarea id="receivable-note" rows="2" maxlength="1000"></textarea></label>
+            </div>
+            <div class="editor-actions"><button id="receivable-save" class="btn" type="submit">儲存紀錄</button><button id="receivable-cancel" class="btn btn-secondary" type="button">取消</button></div>
+            <p id="receivable-error" class="debt-edit-error" role="alert"></p>
+          </form>
+          <div class="debt-filters" role="group" aria-label="收款狀態篩選"><button class="is-active" data-receivable-filter="all" type="button">全部</button><button data-receivable-filter="pending" type="button">未收回</button><button data-receivable-filter="paid" type="button">已收回</button></div>
+          <div id="receivable-record-list" class="debt-record-list"><p class="muted">尚無他人欠款紀錄。</p></div>
+        </section>
+        <section id="reminder-admin-area" hidden>
+        <div class="debt-admin-heading"><div><h3>欠款提醒管理</h3><span class="admin-only-label">🔒 管理者專屬</span></div><button id="debt-reload" class="btn btn-secondary" type="button">重新整理</button></div>
+        <div class="debt-stats">
+          <article class="debt-stat"><span>待處理筆數</span><strong id="debt-pending-count">0</strong></article>
+          <article class="debt-stat"><span>待處理金額</span><strong id="debt-pending-total">NT$ 0</strong></article>
+          <article class="debt-stat"><span>已還款筆數</span><strong id="debt-paid-count">0</strong></article>
+        </div>
+        <div class="debt-filters" role="group" aria-label="欠款狀態篩選"><button class="is-active" data-debt-filter="all" type="button">全部</button><button data-debt-filter="pending" type="button">待還款</button><button data-debt-filter="paid" type="button">已還款</button></div>
+        <div id="debt-record-list" class="debt-record-list"><p class="muted">登入管理帳號後即可查看提醒紀錄。</p></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="market-tool" class="tool-panel container" hidden>
+      <div class="tool-heading"><div><p class="admin-kicker">MARKET WATCH</p><h2>市場行情</h2><p class="muted">黃金及美股指數行情將於後續階段接入可靠資料來源。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+      <div class="tool-card"><h3>市場行情功能規劃中</h3><p class="muted">預計提供黃金、NASDAQ、道瓊等指數與走勢圖。接入資料來源前不顯示虛構報價。</p></div>
+    </section>
+
+    <section class="sections container">
+      <div id="favorites-section" class="section-block favorites-section" hidden>
+        <h3 class="section-title">★ Favorites</h3>
+        <div id="favorites-grid" class="grid cards-grid"></div>
+      </div>
+
+      <!-- Bank Transfer -->
+      <div class="section-block">
+        <h3 class="section-title">🏦 Bank Transfer</h3>
+        <div id="banks-grid" class="grid cards-grid"></div>
+      </div>
+
+      <!-- E-Wallet -->
+      <div class="section-block">
+        <h3 class="section-title">📱 E-Wallet</h3>
+        <div id="ewallet-grid" class="grid cards-grid"></div>
+      </div>
+
+      <!-- USDT -->
+      <div class="section-block">
+        <h3 class="section-title">💰 USDT (TRC20)</h3>
+        <div class="usdt-card card glass payment-card" data-payment-id="usdt:trc20" data-search="USDT TRC20 Wallet Address TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2">
+          <div class="card-media">
+            <img src="images/ustd.jpg" alt="USDT (TRC20)" class="card-img qr-img payment-qr" data-provider="USDT (TRC20)" data-full="images/ustd.jpg">
+          </div>
+          <div class="card-body">
+            <div class="card-heading">
+              <h4 class="card-name">USDT (TRC20)</h4>
+              <button class="favorite-toggle" type="button" data-action="favorite" data-payment-id="usdt:trc20" aria-label="Add USDT (TRC20) to favorites" aria-pressed="false">★</button>
+            </div>
+            <p class="muted">Wallet Address</p>
+            <pre id="usdt-address" class="address">TUGa6c6cDDdQsdc2YaNyhEhJJFhcdyy2T2</pre>
+            <div class="card-actions">
+              <button class="btn ripple" id="copy-usdt" data-action="copy-usdt">Copy Wallet Address</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-app-nav" aria-label="主要功能導覽">
+    <button class="app-nav-item is-active" type="button" data-nav-page="home" aria-current="page"><span class="app-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 9h18M16 14h2"/></svg></span><span>付款方式</span></button>
+    <button class="app-nav-item" type="button" data-nav-page="friends"><span class="app-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1.5a6.5 6.5 0 0 1 13 0V20zM16 5a3.5 3.5 0 0 1 0 6.8M18 14a5 5 0 0 1 3.5 4.8V20h-4"/></svg></span><span>親友轉帳</span></button>
+    <button class="app-nav-item" type="button" data-nav-page="fx"><span class="app-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg></span><span>匯率換算</span></button>
+    <button class="app-nav-item" type="button" data-nav-page="market"><span class="app-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20V4M3 20h18M6 16l5-5 3 2 6-8M15 5h5v5"/></svg></span><span>市場行情</span></button>
+    <button class="app-nav-item" type="button" data-nav-page="debt"><span class="app-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span><span>欠款提醒</span></button>
+  </nav>
+  <button id="back-to-top" class="back-to-top" type="button" aria-label="回到最上面" title="回到最上面">↑</button>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>© 2026 Payment Hub</p>
+    </div>
+  </footer>
+
+  <!-- Personal admin workspace -->
+  <section id="admin-panel" class="admin-panel" hidden aria-labelledby="admin-title">
+    <div class="admin-panel-inner">
+      <div class="admin-heading">
+        <div>
+          <p class="admin-kicker">SHARED ADMIN WORKSPACE</p>
+          <h2 id="admin-title">Payment management</h2>
+          <p class="admin-note">Changes are saved to the shared Payment Hub database and are visible to all visitors.</p>
+        </div>
+        <button id="admin-exit" class="btn btn-secondary" type="button">Exit Admin</button>
+      </div>
+      <div class="admin-toolbar">
+        <button id="add-bank" class="btn" type="button">＋ Add bank</button>
+        <button id="add-wallet" class="btn" type="button">＋ Add e-wallet</button>
+        <button id="export-data" class="btn btn-secondary" type="button">Export backup</button>
+        <button id="import-data" class="btn btn-secondary" type="button">Import backup</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <form id="payment-editor" class="payment-editor" hidden>
+        <h3 id="editor-title">Add payment method</h3>
+        <input id="editor-type" type="hidden">
+        <input id="editor-original-id" type="hidden">
+        <div class="editor-fields">
+          <label>Display name<input id="editor-name" required maxlength="60" autocomplete="off"></label>
+          <label id="bank-code-wrap">Bank code<input id="editor-code" maxlength="12" inputmode="numeric" autocomplete="off"></label>
+          <label id="bank-account-wrap">Account number<input id="editor-account" maxlength="50" autocomplete="off"></label>
+          <label class="upload-label">QR image (JPG / PNG)<input id="editor-image" type="file" accept="image/jpeg,image/png"></label>
+        </div>
+        <p id="editor-image-status" class="admin-note">No new image selected. Existing QR image will be retained when editing.</p>
+        <div class="editor-actions">
+          <button class="btn" type="submit">Save payment method</button>
+          <button id="editor-cancel" class="btn btn-secondary" type="button">Cancel</button>
+        </div>
+      </form>
+      <section class="admin-history">
+        <div class="history-heading"><h3>操作歷史</h3><button id="clear-history" class="btn btn-secondary" type="button">清除紀錄</button></div>
+        <div id="admin-history-list" class="history-list"></div>
+      </section>
+      <div id="admin-payment-lists" class="admin-lists">
+        <div><h3>Banks</h3><div id="admin-banks-list" class="admin-list"></div></div>
+        <div><h3>E-wallets</h3><div id="admin-wallets-list" class="admin-list"></div></div>
+      </div>
+      <p class="admin-security">Security: Supabase authentication and database policies control administrator access. Visitors can only view published payment methods.</p>
+    </div>
+  </section>
+
+  <!-- Debt edit modal -->
+  <div id="debt-edit-modal" class="debt-edit-modal" aria-hidden="true">
+    <div class="debt-edit-overlay" data-debt-edit-close></div>
+    <section class="debt-edit-panel" role="dialog" aria-modal="true" aria-labelledby="debt-edit-title">
+      <div class="debt-edit-heading">
+        <div><h3 id="debt-edit-title">編輯欠款提醒</h3><p>可一次修改以下四個欄位</p></div>
+        <button type="button" class="debt-edit-x" data-debt-edit-close aria-label="關閉">✕</button>
+      </div>
+      <form id="debt-edit-form" class="debt-edit-form">
+        <label>提交人<input id="debt-edit-sender" maxlength="80" required></label>
+        <label>欠款項目<input id="debt-edit-subject" maxlength="200" required></label>
+        <label>欠款金額（NT$）<input id="debt-edit-amount" type="number" min="1" max="1000000000" step="1" required></label>
+        <label>備註（選填）<textarea id="debt-edit-note" rows="3" maxlength="1000"></textarea></label>
+        <p id="debt-edit-error" class="debt-edit-error" role="alert"></p>
+        <div class="debt-edit-actions"><button type="button" class="btn btn-secondary" data-debt-edit-close>取消</button><button id="debt-edit-save" type="submit" class="btn">一次儲存修改</button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- QR Modal -->
+  <div id="qr-modal" class="modal" aria-hidden="true">
+    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-caption">
+      <button id="modal-close" class="modal-close" aria-label="Close">✕</button>
+      <img id="modal-img" src="" alt="QR full view">
+      <p id="modal-caption" class="modal-caption"></p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
@@ -203,9 +203,16 @@
     </section>
 
     <section id="market-tool" class="tool-panel container" hidden>
-      <div class="tool-heading"><div><p class="admin-kicker">MARKET WATCH</p><h2>市場行情</h2><p class="muted">黃金及美股指數行情將於後續階段接入可靠資料來源。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
-      <div class="tool-card"><h3>市場行情功能規劃中</h3><p class="muted">預計提供黃金、NASDAQ、道瓊等指數與走勢圖。接入資料來源前不顯示虛構報價。</p></div>
-    </section>
+  <div class="tool-heading"><div><p class="admin-kicker">MARKET WATCH</p><h2>市場行情</h2><p class="muted">全球主要市場行情與走勢參考。各市場可能有延遲，請留意個別報價時間。</p></div><button class="btn btn-secondary" type="button" data-close-tool>返回首頁</button></div>
+  <div class="market-toolbar"><div class="market-updated"><span id="market-live-dot" class="market-live-dot" aria-hidden="true"></span><span id="market-status" role="status">尚未載入行情</span></div><button id="market-refresh" class="btn btn-secondary" type="button">↻ 更新行情</button></div>
+  <section class="market-section"><div class="market-section-heading"><div><h3>⭐ 自選關注</h3><p>點擊星號加入或移除；清單會保存在此瀏覽器</p></div></div><div id="market-watchlist" class="market-grid"><div class="market-empty">載入自選清單…</div></div></section>
+  <section class="market-section"><div class="market-section-heading"><div><h3>黃金</h3><p>國際黃金現貨參考報價（美元／盎司）</p></div></div><div id="market-gold" class="market-grid"><div class="market-empty">等待報價資料…</div></div></section>
+  <section class="market-section"><div class="market-section-heading"><div><h3>美國市場</h3><p>NASDAQ 綜合指數、NASDAQ 100、道瓊工業指數、S&amp;P 500</p></div></div><div id="market-us" class="market-grid"><div class="market-empty">等待報價資料…</div></div></section>
+  <section class="market-section"><div class="market-section-heading"><div><h3>台灣市場</h3><p>臺灣證券交易所發行量加權股價指數</p></div></div><div id="market-tw" class="market-grid"><div class="market-empty">等待報價資料…</div></div></section>
+  <section class="market-chart-panel tool-card"><div class="market-chart-heading"><div><p class="admin-kicker">PRICE HISTORY</p><h3 id="market-chart-title">市場走勢</h3><p id="market-chart-meta" class="muted">請選擇一項標的</p></div><div class="market-range-tabs" role="group" aria-label="走勢期間"><button type="button" class="is-active" data-market-range="day">日</button><button type="button" data-market-range="week">週</button><button type="button" data-market-range="month">月</button></div></div><div id="market-chart" class="market-chart"><div class="market-empty">選擇上方標的查看走勢</div></div><p id="market-chart-note" class="market-chart-note">歷史資料依報價來源提供；無法取得時會明確提示，不會以模擬數值替代。</p></section>
+  <p class="market-disclaimer">資料說明：資料來源為 Yahoo Finance Chart 資料服務，經公開 CORS 代理取得；此為非官方介接，可能因供應商、交易所休市或網路狀況而延遲或暫時無法取得。不同市場的延遲時間可能不同。資訊僅供參考，不構成投資建議。</p>
+</section>
+
 
     <section class="sections container">
       <div id="favorites-section" class="section-block favorites-section" hidden>
@@ -344,3 +351,4 @@
   <script src="script.js"></script>
 </body>
 </html>
+

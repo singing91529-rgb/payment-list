@@ -1336,6 +1336,7 @@ function openTool(name) {
   document.querySelectorAll(".tool-panel").forEach(el=>el.hidden=true);
   document.getElementById(`${name}-tool`).hidden=false;
   if(name==="friends" && (friendViewerSession || adminMode)){ loadFriendRows().then(()=>{ $("friend-login").hidden=true; $("friend-content").hidden=false; $("friend-admin-editor").hidden=!adminMode; }).catch(err=>{ if(!adminMode) saveFriendViewerSession(null); console.warn(err); }); }
+  if(name==="market") { renderMarketCards(); if(!Object.keys(marketQuotes).length) loadMarketQuotes(); }
   if(name==="debt") {
     $("debt-admin-area").hidden=!adminMode;
     if(adminMode) loadDebtRows().catch(err=>showToast(err.message || "無法讀取欠款紀錄。"));
@@ -1560,3 +1561,317 @@ document.addEventListener("DOMContentLoaded", async () => {
 const backToTopButton = document.getElementById("back-to-top");
 window.addEventListener("scroll",()=>backToTopButton?.classList.toggle("is-visible",window.scrollY>360),{passive:true});
 backToTopButton?.addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));
+
+/* ---------- Market Watch: source-aware quote and chart integration ---------- */
+const MARKET_STORAGE_KEY="payment-hub-market-watchlist";
+const MARKET_DEFAULT_WATCH=["GOLD","IXIC","NDX","DJI","SPX","TWII"];
+const MARKET_SYMBOLS=[
+  {id:"GOLD",name:"黃金現貨",code:"XAU/USD",group:"gold",unit:"USD / oz",providerSymbol:"XAUUSD=X"},
+  {id:"IXIC",name:"NASDAQ 綜合指數",code:"NASDAQ",group:"us",unit:"點",providerSymbol:"^IXIC"},
+  {id:"NDX",name:"NASDAQ 100",code:"NASDAQ 100",group:"us",unit:"點",providerSymbol:"^NDX"},
+  {id:"DJI",name:"道瓊工業指數",code:"DOW JONES",group:"us",unit:"點",providerSymbol:"^DJI"},
+  {id:"SPX",name:"S&P 500",code:"S&P 500",group:"us",unit:"點",providerSymbol:"^GSPC"},
+  {id:"TWII",name:"台灣加權指數",code:"TAIEX",group:"tw",unit:"點",providerSymbol:"^TWII"}
+];
+const MARKET_CHART_RANGES={day:{label:"日線",range:"1d",interval:"5m"},week:{label:"週線",range:"5d",interval:"30m"},month:{label:"月線",range:"1mo",interval:"1d"}};
+let marketQuotes={},marketSelected="GOLD",marketRange="day",marketLastUpdated="",marketHistoryRequest=0,marketQuoteRequest=0,marketWatchlist=loadMarketWatchlist();
+function loadMarketWatchlist(){try{const saved=JSON.parse(localStorage.getItem(MARKET_STORAGE_KEY)||"null");if(Array.isArray(saved))return [...new Set(saved.filter(id=>MARKET_SYMBOLS.some(s=>s.id===id)))];}catch(e){console.warn("Market watchlist local data error",e);}return [...MARKET_DEFAULT_WATCH];}
+function saveMarketWatchlist(){try{localStorage.setItem(MARKET_STORAGE_KEY,JSON.stringify(marketWatchlist));}catch(e){console.warn("Cannot save market watchlist",e);}}
+function marketNumber(v,d=2){return Number(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function marketQuoteAge(t){return t?new Date(t*1000).toLocaleString("zh-TW",{timeZone:"Asia/Taipei",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"報價時間未知";}
+function marketCard(s){const q=marketQuotes[s.id],selected=marketSelected===s.id,watched=marketWatchlist.includes(s.id),price=q&&Number.isFinite(q.price)?marketNumber(q.price):"暫無報價",age=q?marketQuoteAge(q.timestamp):"尚無可用時間",change=q&&Number.isFinite(q.change)&&Number.isFinite(q.changePercent)?(q.change>0?"+":"")+marketNumber(q.change)+" ("+(q.change>0?"+":"")+marketNumber(q.changePercent)+"%)":"漲跌資料暫缺",trend=q?(q.change>0?"up":q.change<0?"down":"flat"):"flat";return '<article class="market-card '+(selected?"is-selected":"")+'"><div class="market-card-top"><div class="market-card-name"><strong>'+s.name+'</strong><small>'+s.code+' · '+s.unit+'</small></div><button type="button" class="market-star '+(watched?"is-active":"")+'" data-market-watch="'+s.id+'" aria-label="'+(watched?"移除自選":"加入自選")+'" aria-pressed="'+watched+'">★</button></div><button type="button" class="market-select" data-market-select="'+s.id+'"><span class="market-price">'+price+'</span><span class="market-change '+trend+'">'+(q?change:"尚未取得報價")+'</span></button><div class="market-card-foot"><span>'+(q?"Yahoo Finance · 可能延遲":"資料尚未取得")+'</span><span>'+age+'</span></div></article>';}
+function renderMarketCards(){const render=(id,list)=>{const el=$(id);if(el)el.innerHTML=list.length?list.map(marketCard).join(""):'<div class="market-empty">尚未加入自選標的。</div>';};render("market-watchlist",MARKET_SYMBOLS.filter(s=>marketWatchlist.includes(s.id)));render("market-gold",MARKET_SYMBOLS.filter(s=>s.group==="gold"));render("market-us",MARKET_SYMBOLS.filter(s=>s.group==="us"));render("market-tw",MARKET_SYMBOLS.filter(s=>s.group==="tw"));}
+async function fetchYahooChart(symbol,range,interval){const endpoint="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(symbol)+"?range="+encodeURIComponent(range)+"&interval="+encodeURIComponent(interval),urls=["https://proxy.cors.dev/"+endpoint,"https://api.allorigins.win/raw?url="+encodeURIComponent(endpoint)];let last;for(const url of urls){try{const r=await fetch(url,{cache:"no-store",credentials:"omit",signal:AbortSignal.timeout(12000)});if(!r.ok)throw new Error("行情服務 HTTP "+r.status);const data=await r.json(),result=data?.chart?.result?.[0];if(data?.chart?.error)throw new Error(data.chart.error.description||"行情來源回傳錯誤");if(!result?.meta)throw new Error("行情資料格式不完整");return result;}catch(e){last=e;}}throw last||new Error("目前無法連接行情來源");}
+function quoteFromChart(result){const m=result.meta||{},values=(result.indicators?.quote?.[0]?.close||[]).filter(Number.isFinite),price=Number.isFinite(m.regularMarketPrice)?m.regularMarketPrice:(values.length?values[values.length-1]:null),previous=Number.isFinite(m.chartPreviousClose)?m.chartPreviousClose:m.previousClose,change=Number.isFinite(price)&&Number.isFinite(previous)?price-previous:null;return {price,change,changePercent:Number.isFinite(change)&&previous?change/previous*100:null,timestamp:m.regularMarketTime||((result.timestamp||[]).filter(Boolean).slice(-1)[0]||null),currency:m.currency||""};}
+async function loadMarketQuotes(){const status=$("market-status"),dot=$("market-live-dot"),button=$("market-refresh"),request=++marketQuoteRequest;if(status)status.textContent=Object.keys(marketQuotes).length?"正在更新行情；保留上次成功資料…":"正在連線取得市場資料…";if(dot)dot.classList.remove("is-live");if(button){button.disabled=true;button.textContent="更新中…";}const results=await Promise.allSettled(MARKET_SYMBOLS.map(async s=>[s.id,quoteFromChart(await fetchYahooChart(s.providerSymbol,"1d","1d"))]));if(request!==marketQuoteRequest)return;let successes=0;const next={...marketQuotes};results.forEach((r,i)=>{if(r.status==="fulfilled"&&Number.isFinite(r.value[1].price)){next[r.value[0]]=r.value[1];successes++;}else console.warn("Market quote unavailable:",MARKET_SYMBOLS[i].id,r.reason);});marketQuotes=next;if(successes)marketLastUpdated=new Date().toLocaleString("zh-TW",{timeZone:"Asia/Taipei"});renderMarketCards();if(status){const times=MARKET_SYMBOLS.map(s=>marketQuotes[s.id]?.timestamp).filter(Boolean).map(t=>t*1000),latest=times.length?new Date(Math.max(...times)).toLocaleString("zh-TW",{timeZone:"Asia/Taipei"}):"無可用報價時間";if(successes){status.textContent=successes+" / 6 項更新成功｜頁面更新："+marketLastUpdated+"｜最新來源報價時間："+latest;if(dot)dot.classList.add("is-live");}else status.textContent=Object.keys(marketQuotes).length?"本次更新失敗，保留上次成功資料；來源報價時間不變。":"目前無法取得行情，請稍後重試。";}if(button){button.disabled=false;button.textContent="↻ 更新行情";}if(!marketHistoryRequest)renderMarketChart();}
+function drawMarketChart(points){const el=$("market-chart"),values=points.map(p=>p.value).filter(Number.isFinite);if(!el)return;if(values.length<2){el.innerHTML='<div class="market-empty">此期間暫無足夠的歷史走勢資料。</div>';return;}const w=900,h=220,p=18,min=Math.min(...values),max=Math.max(...values),span=max-min||Math.abs(max)*.001||1,xy=values.map((v,i)=>({x:p+(w-p*2)*i/(values.length-1),y:h-p-(v-min)/span*(h-p*2)})),line=xy.map(q=>q.x.toFixed(1)+","+q.y.toFixed(1)).join(" "),area="M "+xy[0].x+" "+(h-p)+" L "+xy.map(q=>q.x+" "+q.y).join(" L ")+" L "+xy[xy.length-1].x+" "+(h-p)+" Z";el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="市場歷史走勢圖"><defs><linearGradient id="market-area-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#287fc7" stop-opacity=".28"/><stop offset="100%" stop-color="#287fc7" stop-opacity=".02"/></linearGradient></defs><path d="'+area+'" fill="url(#market-area-fill)"/><polyline points="'+line+'" fill="none" stroke="#287fc7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="'+p+'" y1="'+(h-p)+'" x2="'+(w-p)+'" y2="'+(h-p)+'" stroke="currentColor" opacity=".16"/></svg>';}
+async function renderMarketChart(){const s=MARKET_SYMBOLS.find(x=>x.id===marketSelected);if(!s)return;const req=++marketHistoryRequest;$("market-chart-title").textContent=s.name+" 走勢";$("market-chart-meta").textContent=MARKET_CHART_RANGES[marketRange].label+"｜"+s.unit+"｜來源：Yahoo Finance（可能延遲）";$("market-chart").innerHTML='<div class="market-empty">正在載入歷史走勢…</div>';try{const cfg=MARKET_CHART_RANGES[marketRange],r=await fetchYahooChart(s.providerSymbol,cfg.range,cfg.interval);if(req!==marketHistoryRequest)return;const ts=r.timestamp||[],closes=r.indicators?.quote?.[0]?.close||[],points=ts.map((time,i)=>({time,value:closes[i]})).filter(x=>Number.isFinite(x.value));drawMarketChart(points);$("market-chart-note").textContent="來源：Yahoo Finance Chart 資料服務；最後資料點："+(points.length?marketQuoteAge(points[points.length-1].time):"未知")+"。歷史資料時間可能與報價卡不同。";}catch(e){if(req!==marketHistoryRequest)return;console.warn("Market history unavailable",e);$("market-chart").innerHTML='<div class="market-empty">目前無法取得此標的的歷史走勢。請稍後重試；不會以模擬數值取代。</div>';$("market-chart-note").textContent="歷史走勢目前不可用；上方報價卡不會因圖表失敗而被虛構值覆蓋。";}}
+document.addEventListener("click",event=>{const watch=event.target.closest("[data-market-watch]");if(watch){const id=watch.dataset.marketWatch;marketWatchlist=marketWatchlist.includes(id)?marketWatchlist.filter(x=>x!==id):[...marketWatchlist,id];saveMarketWatchlist();renderMarketCards();return;}const select=event.target.closest("[data-market-select]");if(select){marketSelected=select.dataset.marketSelect;renderMarketCards();renderMarketChart();}});
+document.querySelectorAll("[data-market-range]").forEach(button=>button.addEventListener("click",()=>{marketRange=button.dataset.marketRange;document.querySelectorAll("[data-market-range]").forEach(b=>b.classList.toggle("is-active",b===button));renderMarketChart();}));
+$("market-refresh")?.addEventListener("click",loadMarketQuotes);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&document.querySelector("#market-tool:not([hidden])"))loadMarketQuotes();});
+setInterval(()=>{if(!document.hidden&&document.querySelector("#market-tool:not([hidden])"))loadMarketQuotes();},300000);
+
+
+
+/* PAYMENT_HUB_GOLD_ONLY_FIX_V2
+ * Isolated gold quote/history integration. Does not replace shared index quote loaders.
+ */
+(() => {
+  const GOLD_CACHE_KEY = "payment-hub-gold-quote-cache-v2";
+  const GOLD_SYMBOL = "XAUUSD=X";
+  let goldRequestInFlight = null;
+  let goldChartRequestId = 0;
+
+  function goldToSeconds(value) {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value > 1000000000000 ? Math.floor(value / 1000) : Math.floor(value);
+    }
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+  }
+
+  function goldFormatPrice(value) {
+    return Number(value).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function goldReadCache() {
+    try {
+      const value = JSON.parse(localStorage.getItem(GOLD_CACHE_KEY) || "null");
+      if (value && Number.isFinite(Number(value.price)) && Number(value.price) > 0) {
+        return {
+          price: Number(value.price),
+          change: null,
+          changePercent: null,
+          timestamp: goldToSeconds(value.timestamp),
+          source: "XAUS",
+          stale: true,
+          cached: true
+        };
+      }
+    } catch (error) {
+      console.warn("Gold cache unavailable", error);
+    }
+    return null;
+  }
+
+  function goldApplyCardText() {
+    if (typeof marketQuotes === "undefined") return;
+    const quote = marketQuotes.GOLD;
+    document.querySelectorAll('[data-market-card="GOLD"]').forEach(card => {
+      const priceNode = card.querySelector(".market-price");
+      const changeNode = card.querySelector(".market-change");
+      const footNodes = card.querySelectorAll(".market-card-foot span");
+
+      if (priceNode) {
+        priceNode.textContent = quote && Number.isFinite(Number(quote.price))
+          ? goldFormatPrice(quote.price)
+          : "暫無報價";
+      }
+      if (changeNode) {
+        changeNode.classList.remove("up", "down");
+        changeNode.classList.add("flat");
+        if (quote && Number.isFinite(Number(quote.price))) {
+          changeNode.textContent = quote.stale
+            ? "上次成功取得的黃金參考價（資料可能延遲）"
+            : "黃金現貨中間參考價";
+        } else {
+          changeNode.textContent = "XAUS 黃金資料尚未取得";
+        }
+      }
+      if (footNodes[0]) {
+        footNodes[0].textContent = quote
+          ? (quote.stale ? "XAUS · 上次成功資料" : "XAUS · 黃金現貨")
+          : "XAUS 黃金資料";
+      }
+      if (footNodes[1]) {
+        footNodes[1].textContent = quote && quote.timestamp
+          ? marketQuoteAge(quote.timestamp)
+          : "尚無可用時間";
+      }
+    });
+  }
+
+  async function goldFetchJson(path, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch("https://xaus.com/api/v1/" + path, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "omit",
+        headers: { "Accept": "application/json" },
+        signal: controller.signal
+      });
+      const raw = await response.text();
+      let data;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        throw new Error("XAUS 回傳內容不是有效 JSON");
+      }
+      if (!response.ok) {
+        throw new Error(data?.error || ("XAUS HTTP " + response.status));
+      }
+      if (data?.data_state?.status === "unavailable") {
+        throw new Error(data.error || "XAUS 暫時沒有可用的黃金資料");
+      }
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function refreshGoldOnly() {
+    if (goldRequestInFlight) return goldRequestInFlight;
+
+    goldRequestInFlight = (async () => {
+      // Show last successful gold value immediately, clearly marked as cached.
+      if (!marketQuotes.GOLD) {
+        const cached = goldReadCache();
+        if (cached) {
+          marketQuotes.GOLD = cached;
+          if (typeof renderMarketCards === "function") renderMarketCards();
+          goldApplyCardText();
+        }
+      }
+
+      try {
+        const data = await goldFetchJson("spot?compact=1");
+        const price = Number(data.spot_usd_oz ?? data.xau?.price);
+        const state = data.data_state?.status || (data.stale ? "stale" : "fresh");
+        if (!Number.isFinite(price) || price <= 0 || state === "unavailable") {
+          throw new Error("XAUS 沒有提供有效的黃金現貨價格");
+        }
+
+        const asOf = data.price_as_of || data.data_state?.as_of || data.updated_at;
+        const quote = {
+          price,
+          change: null,
+          changePercent: null,
+          timestamp: goldToSeconds(asOf),
+          source: "XAUS",
+          stale: state !== "fresh",
+          cached: false,
+          asOf: asOf || null,
+          ageSeconds: Number.isFinite(Number(data.data_state?.age_seconds))
+            ? Number(data.data_state.age_seconds) : null
+        };
+
+        marketQuotes.GOLD = quote;
+        try {
+          localStorage.setItem(GOLD_CACHE_KEY, JSON.stringify({
+            price: quote.price,
+            timestamp: quote.timestamp,
+            asOf: quote.asOf
+          }));
+        } catch (error) {
+          console.warn("Gold cache could not be saved", error);
+        }
+
+        if (typeof renderMarketCards === "function") renderMarketCards();
+        goldApplyCardText();
+      } catch (error) {
+        console.warn("Gold-only refresh failed", error);
+        // Do not clear an existing successful quote on a temporary API failure.
+        if (marketQuotes.GOLD) {
+          marketQuotes.GOLD = { ...marketQuotes.GOLD, stale: true, cached: true };
+        }
+        if (typeof renderMarketCards === "function") renderMarketCards();
+        goldApplyCardText();
+      }
+    })().finally(() => {
+      goldRequestInFlight = null;
+    });
+
+    return goldRequestInFlight;
+  }
+
+  function goldHistoryTime(value) {
+    return goldToSeconds(value);
+  }
+
+  async function fetchGoldHistory(range) {
+    if (range === "day") {
+      const data = await goldFetchJson("intraday?symbol=xau&hours=24");
+      const rows = Array.isArray(data.points) ? data.points : [];
+      return rows.map(row => ({
+        time: goldHistoryTime(row.t ?? row.time ?? row.timestamp),
+        value: Number(row.p ?? row.price ?? row.close ?? row.c)
+      })).filter(point => point.time && Number.isFinite(point.value))
+        .sort((a, b) => a.time - b.time);
+    }
+
+    const data = await goldFetchJson("history");
+    const rows = Array.isArray(data.points) ? data.points : [];
+    const days = range === "week" ? 7 : 31;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    return rows.map(row => ({
+      time: goldHistoryTime(row.d ?? row.date ?? row.t ?? row.timestamp),
+      value: Number(row.c ?? row.close ?? row.p ?? row.price)
+    })).filter(point => point.time && point.time * 1000 >= cutoff && Number.isFinite(point.value))
+      .sort((a, b) => a.time - b.time);
+  }
+
+  const originalFetchYahooChart = fetchYahooChart;
+  fetchYahooChart = async function(symbol, range, interval) {
+    // Yahoo is used for the five indices only; XAU uses XAUS exclusively.
+    if (symbol === GOLD_SYMBOL) {
+      throw new Error("黃金行情改由 XAUS 獨立資料來源提供");
+    }
+    return originalFetchYahooChart(symbol, range, interval);
+  };
+
+  const originalRenderMarketCards = renderMarketCards;
+  renderMarketCards = function() {
+    originalRenderMarketCards();
+    goldApplyCardText();
+  };
+
+  const originalRenderMarketChart = renderMarketChart;
+  renderMarketChart = async function() {
+    if (marketSelected !== "GOLD") {
+      return originalRenderMarketChart();
+    }
+
+    const requestId = ++goldChartRequestId;
+    const symbol = MARKET_SYMBOLS.find(item => item.id === "GOLD");
+    const rangeConfig = MARKET_CHART_RANGES[marketRange];
+
+    $("market-chart-title").textContent = (symbol?.name || "黃金現貨") + " 走勢";
+    $("market-chart-meta").textContent = rangeConfig.label + "｜USD / oz｜來源：XAUS";
+    $("market-chart").innerHTML = '<div class="market-empty">正在載入 XAUS 黃金歷史資料…</div>';
+    $("market-chart-note").textContent = "歷史資料時間可能與現貨報價時間不同。";
+
+    try {
+      const points = await fetchGoldHistory(marketRange);
+      if (requestId !== goldChartRequestId || marketSelected !== "GOLD") return;
+      if (!Array.isArray(points) || points.length < 2) {
+        throw new Error("此期間目前沒有足夠的黃金歷史資料點");
+      }
+      drawMarketChart(points);
+      const lastPoint = points[points.length - 1];
+      $("market-chart-note").textContent =
+        "來源：XAUS 黃金資料 API｜最後資料點：" + marketQuoteAge(lastPoint.time) +
+        "。此為歷史參考資料，不代表即時成交價。";
+    } catch (error) {
+      if (requestId !== goldChartRequestId || marketSelected !== "GOLD") return;
+      console.warn("XAUS gold history unavailable", error);
+      $("market-chart").innerHTML =
+        '<div class="market-empty">目前無法取得黃金歷史走勢；請稍後重試，不會以模擬數值取代。</div>';
+      $("market-chart-note").textContent =
+        "來源：XAUS。若日內資料尚未累積，日線可能暫時沒有足夠資料；週線及月線使用每日歷史收盤資料。";
+    }
+  };
+
+  const originalOpenTool = openTool;
+  openTool = function(name) {
+    const result = originalOpenTool.apply(this, arguments);
+    if (name === "market") refreshGoldOnly();
+    return result;
+  };
+
+  $("market-refresh")?.addEventListener("click", refreshGoldOnly);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && document.querySelector("#market-tool:not([hidden])")) {
+      refreshGoldOnly();
+    }
+  });
+
+  setInterval(() => {
+    if (!document.hidden && document.querySelector("#market-tool:not([hidden])")) {
+      refreshGoldOnly();
+    }
+  }, 120000);
+
+  // Restore the gold cache into memory before the first market render when present.
+  const initialGoldCache = goldReadCache();
+  if (!marketQuotes.GOLD && initialGoldCache) marketQuotes.GOLD = initialGoldCache;
+})();
+

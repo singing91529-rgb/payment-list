@@ -2574,6 +2574,28 @@ setInterval(()=>{if(!document.hidden&&document.querySelector("#market-tool:not([
     form.reset();
   }
 
+  // Ask the browser password manager to store credentials only after
+  // Supabase authentication and the payment_admins authorization check succeed.
+  async function requestBrowserPasswordSave() {
+    if (!window.isSecureContext || typeof window.PasswordCredential !== "function" ||
+        !navigator.credentials || typeof navigator.credentials.store !== "function") {
+      return false;
+    }
+    try {
+      const credential = new PasswordCredential({
+        id: emailInput.value.trim(),
+        password: passwordInput.value,
+        name: emailInput.value.trim()
+      });
+      await navigator.credentials.store(credential);
+      return true;
+    } catch (error) {
+      // A password-manager failure must never undo a successful site login.
+      console.info("Browser password save was unavailable or declined.", error);
+      return false;
+    }
+  }
+
   // The existing Admin Mode button calls this function when the user is logged out.
   requestAdminAccess = function requestAdminAccess() {
     message.textContent = "";
@@ -2621,6 +2643,7 @@ setInterval(()=>{if(!document.hidden&&document.querySelector("#market-tool:not([
     message.textContent = "正在驗證管理員帳號…";
     try {
       await signInAdmin(email, password);
+      await requestBrowserPasswordSave();
       closeAdminLogin();
       showToast("已成功登入管理模式。");
     } catch (error) {

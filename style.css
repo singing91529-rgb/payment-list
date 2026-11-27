@@ -1,4 +1,4 @@
-﻿/* style.css - Payment Hub
+/* style.css - Payment Hub
    Dark glassmorphism theme, smooth animations, responsive layout
    Supports: hero svg, cards, modal, toast, ripple, intersection reveal
 */
@@ -1148,4 +1148,196 @@ main{padding-bottom:20px}
 .market-card{position:relative;min-width:0;padding:17px;border:1px solid var(--glass-border,rgba(128,128,128,.25));border-radius:17px;background:var(--card-bg,rgba(128,128,128,.07));display:grid;gap:10px;transition:transform .18s ease,border-color .18s ease}.market-card:hover{transform:translateY(-2px);border-color:rgba(40,127,199,.55)}.market-card.is-selected{border-color:#287fc7;box-shadow:0 0 0 2px rgba(40,127,199,.13)}.market-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.market-card-name{display:grid;gap:3px;min-width:0}.market-card-name strong{font-size:.98rem;overflow-wrap:anywhere}.market-card-name small{color:var(--muted);font-size:.78rem}.market-star{border:0;background:transparent;color:var(--muted);font-size:1.25rem;cursor:pointer;padding:0 2px;line-height:1}.market-star.is-active{color:#e5a72d}.market-select{display:grid;gap:5px;border:0;background:transparent;color:inherit;text-align:left;padding:0;cursor:pointer}.market-price{font-size:clamp(1.25rem,3vw,1.65rem);font-weight:850;letter-spacing:-.025em;overflow-wrap:anywhere}.market-change{font-size:.84rem;font-weight:750}.market-change.up{color:#16a36a}.market-change.down{color:#dc5b5b}.market-change.flat{color:var(--muted)}.market-card-foot{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;color:var(--muted);font-size:.72rem;line-height:1.45}.market-card-foot span{overflow-wrap:anywhere}.market-empty{grid-column:1/-1;padding:18px;border:1px dashed var(--glass-border,rgba(128,128,128,.3));border-radius:14px;color:var(--muted);text-align:center;font-size:.9rem;line-height:1.5}
 .market-chart-panel{max-width:none;margin-top:28px}.market-chart-heading{align-items:center;flex-wrap:wrap}.market-range-tabs{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--glass-bg,rgba(120,130,150,.12))}.market-range-tabs button{border:0;background:transparent;color:var(--muted);border-radius:9px;padding:8px 14px;font:inherit;font-weight:750;cursor:pointer}.market-range-tabs button.is-active{background:#287fc7;color:#fff}.market-chart{min-height:220px;display:grid;align-items:center}.market-chart svg{width:100%;height:220px;display:block;overflow:visible}.market-chart-note,.market-disclaimer{color:var(--muted);font-size:.8rem;line-height:1.65}.market-disclaimer{margin:16px 4px 28px}
 @media(max-width:760px){.market-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.market-grid{grid-template-columns:1fr}.market-card{padding:15px}.market-toolbar{align-items:stretch;flex-direction:column}.market-toolbar .btn{width:100%}.market-chart-heading{align-items:flex-start;flex-direction:column}.market-chart{min-height:190px}.market-chart svg{height:190px}}
+
+
+
+/* PAYMENT_HUB_DARK_CONTRAST_FIX_V1
+   Fix dark-mode white-on-light cards and unreadable form controls.
+   Light theme is intentionally untouched.
+*/
+:root:not([data-theme="light"]) {
+  --card-bg: #121a28;
+  --input-bg: #0c1421;
+  --glass-bg: rgba(255,255,255,.055);
+  --glass-border: rgba(148,163,184,.23);
+  --surface-2: rgba(148,163,184,.12);
+  color-scheme: dark;
+}
+
+/* Tool panels and cards */
+:root:not([data-theme="light"]) .tool-card,
+:root:not([data-theme="light"]) .friend-card,
+:root:not([data-theme="light"]) .debt-public-card,
+:root:not([data-theme="light"]) .receivable-form,
+:root:not([data-theme="light"]) .debt-edit-panel {
+  color: #edf2fa;
+  background: linear-gradient(145deg, #151f30, #101827);
+  border-color: #2a3a52;
+}
+
+/* Labels and descriptions */
+:root:not([data-theme="light"]) .tool-card label,
+:root:not([data-theme="light"]) .debt-form label,
+:root:not([data-theme="light"]) .debt-edit-form label,
+:root:not([data-theme="light"]) .receivable-form label,
+:root:not([data-theme="light"]) .debt-intro h3,
+:root:not([data-theme="light"]) .debt-admin-heading h3,
+:root:not([data-theme="light"]) .receivable-form h4,
+:root:not([data-theme="light"]) .friend-card h3 {
+  color: #edf2fa;
+}
+
+/* Inputs, selects, dates, and text areas */
+:root:not([data-theme="light"]) .tool-card input,
+:root:not([data-theme="light"]) .tool-card select,
+:root:not([data-theme="light"]) .tool-card textarea,
+:root:not([data-theme="light"]) #friend-search,
+:root:not([data-theme="light"]) .debt-form input,
+:root:not([data-theme="light"]) .debt-form textarea,
+:root:not([data-theme="light"]) .debt-edit-form input,
+:root:not([data-theme="light"]) .debt-edit-form textarea {
+  color: #f1f5fb !important;
+  background: #0b1320 !important;
+  border-color: #35465f !important;
+  color-scheme: dark;
+  caret-color: #8fc5ff;
+}
+
+:root:not([data-theme="light"]) .tool-card input::placeholder,
+:root:not([data-theme="light"]) .tool-card textarea::placeholder,
+:root:not([data-theme="light"]) #friend-search::placeholder,
+:root:not([data-theme="light"]) .debt-form input::placeholder,
+:root:not([data-theme="light"]) .debt-form textarea::placeholder,
+:root:not([data-theme="light"]) .debt-edit-form input::placeholder,
+:root:not([data-theme="light"]) .debt-edit-form textarea::placeholder {
+  color: #8292aa !important;
+  opacity: 1;
+}
+
+:root:not([data-theme="light"]) .tool-card input:focus,
+:root:not([data-theme="light"]) .tool-card select:focus,
+:root:not([data-theme="light"]) .tool-card textarea:focus,
+:root:not([data-theme="light"]) .debt-form input:focus,
+:root:not([data-theme="light"]) .debt-form textarea:focus,
+:root:not([data-theme="light"]) .debt-edit-form input:focus,
+:root:not([data-theme="light"]) .debt-edit-form textarea:focus {
+  outline: 2px solid rgba(83,159,255,.35);
+  border-color: #549fe8 !important;
+}
+
+/* Debt summary cards: avoid white cards with pale labels */
+:root:not([data-theme="light"]) .debt-stat {
+  background: linear-gradient(145deg, #19263a, #121c2b) !important;
+  color: #f1f5fb !important;
+  border-color: #30445f !important;
+  box-shadow: 0 9px 24px rgba(0,0,0,.2);
+}
+:root:not([data-theme="light"]) .debt-stat span {
+  color: #aebdd2 !important;
+}
+:root:not([data-theme="light"]) .debt-stat strong {
+  color: #75baff !important;
+}
+
+/* Receivable / payable records */
+:root:not([data-theme="light"]) .debt-record {
+  background: linear-gradient(145deg, #182438, #111a29) !important;
+  color: #edf2fa !important;
+  border-color: #30435d !important;
+  box-shadow: 0 8px 22px rgba(0,0,0,.18);
+}
+:root:not([data-theme="light"]) .debt-record-top strong,
+:root:not([data-theme="light"]) .debt-record > div:not(.debt-record-meta):not(.debt-record-top):not(.debt-record-actions) {
+  color: #edf2fa !important;
+}
+:root:not([data-theme="light"]) .debt-record-meta,
+:root:not([data-theme="light"]) .debt-record .muted {
+  color: #aebdd2 !important;
+}
+:root:not([data-theme="light"]) .debt-record-amount {
+  color: #79bdff !important;
+}
+
+/* Status chips */
+:root:not([data-theme="light"]) .debt-status {
+  background: rgba(245,158,11,.18) !important;
+  color: #ffd28a !important;
+}
+:root:not([data-theme="light"]) .debt-status.paid {
+  background: rgba(34,197,94,.16) !important;
+  color: #7ce6a8 !important;
+}
+:root:not([data-theme="light"]) .debt-status.overdue {
+  background: rgba(239,68,68,.18) !important;
+  color: #ff9d9d !important;
+}
+
+/* Record action buttons */
+:root:not([data-theme="light"]) .debt-record-actions button {
+  color: #e8eef8 !important;
+  background: #1a273a !important;
+  border-color: #425672 !important;
+}
+:root:not([data-theme="light"]) .debt-record-actions button:hover {
+  background: #263a55 !important;
+  border-color: #6a91bd !important;
+}
+:root:not([data-theme="light"]) .debt-record-actions button.danger {
+  color: #ff9c9c !important;
+  background: rgba(150,35,45,.16) !important;
+  border-color: rgba(230,90,100,.45) !important;
+}
+
+/* Tabs, filters, and explanatory notices */
+:root:not([data-theme="light"]) .debt-management-tabs,
+:root:not([data-theme="light"]) .debt-filters {
+  background: #101827 !important;
+  border: 1px solid #2b3b52;
+}
+:root:not([data-theme="light"]) .debt-management-tabs button,
+:root:not([data-theme="light"]) .debt-filters button {
+  color: #b7c4d7 !important;
+}
+:root:not([data-theme="light"]) .debt-management-tabs button.is-active,
+:root:not([data-theme="light"]) .debt-filters button.is-active {
+  background: #287fc7 !important;
+  color: #fff !important;
+}
+:root:not([data-theme="light"]) .debt-message {
+  color: #d6e6fb !important;
+  background: rgba(40,127,199,.18) !important;
+}
+:root:not([data-theme="light"]) .admin-only-label {
+  color: #80bdff !important;
+}
+
+/* Friend directory tiles and general text controls */
+:root:not([data-theme="light"]) .friend-account {
+  color: #f1f5fb !important;
+}
+:root:not([data-theme="light"]) .tool-card .muted,
+:root:not([data-theme="light"]) .friend-card .muted,
+:root:not([data-theme="light"]) .debt-edit-heading p {
+  color: #aebdd2 !important;
+}
+:root:not([data-theme="light"]) .tool-card select option {
+  color: #edf2fa;
+  background: #0b1320;
+}
+:root:not([data-theme="light"]) .tool-card input:disabled,
+:root:not([data-theme="light"]) .tool-card select:disabled,
+:root:not([data-theme="light"]) .tool-card textarea:disabled {
+  color: #8594aa !important;
+  background: #182235 !important;
+  opacity: 1;
+}
+
+/* Keep the app navigation readable in dark theme after defining --card-bg */
+:root:not([data-theme="light"]) .bottom-app-nav {
+  background: rgba(18,26,40,.96) !important;
+  border-color: #30415a !important;
+}
+:root:not([data-theme="light"]) .app-nav-item:not(.is-active) {
+  color: #aebdd2 !important;
+}
 

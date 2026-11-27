@@ -1875,3 +1875,228 @@ setInterval(()=>{if(!document.hidden&&document.querySelector("#market-tool:not([
   if (!marketQuotes.GOLD && initialGoldCache) marketQuotes.GOLD = initialGoldCache;
 })();
 
+
+
+/* PAYMENT_HUB_MARKET_STATUS_FIX_V1
+ * Per-symbol freshness, correct gold provider label, and accurate 6-symbol summary.
+ * This is an add-on only. It does not replace the shared quote loader or data sources.
+ */
+(() => {
+  if (window.__paymentHubMarketStatusFixInstalled) return;
+  window.__paymentHubMarketStatusFixInstalled = true;
+
+  const MARKET_STATUS_IDS = ["GOLD", "IXIC", "NDX", "DJI", "SPX", "TWII"];
+  const indexStates = Object.create(null);
+  const stateLabels = {
+    fresh: "本次更新成功",
+    stale: "沿用上次成功資料",
+    failed: "本次更新失敗",
+    loading: "正在更新",
+    unknown: "更新狀態待確認"
+  };
+
+  MARKET_STATUS_IDS.forEach(id => { indexStates[id] = "loading"; });
+
+  function goldState(quote) {
+    if (!quote || !Number.isFinite(Number(quote.price)) || Number(quote.price) <= 0) {
+      return "failed";
+    }
+    const age = Number(quote.ageSeconds);
+    const timestampAge = quote.timestamp
+      ? Math.max(0, Date.now() / 1000 - Number(quote.timestamp))
+      : null;
+    if (quote.stale || quote.cached || (Number.isFinite(age) && age > 300) ||
+        (Number.isFinite(timestampAge) && timestampAge > 300)) {
+      return "stale";
+    }
+    return "fresh";
+  }
+
+  function statusFor(id, quote) {
+    const hasUsablePrice = quote && Number.isFinite(Number(quote.price)) && Number(quote.price) > 0;
+    if (id === "GOLD") return goldState(quote);
+
+    const state = indexStates[id] || "loading";
+    if (!hasUsablePrice) return state === "loading" ? "loading" : "failed";
+    if (state === "fresh") return "fresh";
+    if (state === "stale" || state === "failed") return "stale";
+    if (state === "loading") return "unknown";
+    return "unknown";
+  }
+
+  function providerFor(id, quote) {
+    if (id === "GOLD") {
+      return quote && quote.source === "XAUS"
+        ? "XAUS · 黃金現貨（USD / oz）"
+        : "XAUS · 黃金資料";
+    }
+    return "Yahoo Finance · 可能延遲";
+  }
+
+  function ensureStatusNode(card) {
+    let node = card.querySelector(".market-card-update-state");
+    if (!node) {
+      node = document.createElement("div");
+      node.className = "market-card-update-state";
+      node.setAttribute("role", "status");
+      const target = card.querySelector(".market-select") || card.querySelector(".market-price");
+      if (target && target.parentNode) {
+        target.parentNode.insertBefore(node, target.nextSibling);
+      } else {
+        card.appendChild(node);
+      }
+    }
+    return node;
+  }
+
+  function decorateCards() {
+    if (typeof MARKET_SYMBOLS === "undefined" || typeof marketQuotes === "undefined") return;
+    document.querySelectorAll("[data-market-card]").forEach(card => {
+      const id = card.getAttribute("data-market-card");
+      if (!MARKET_STATUS_IDS.includes(id)) return;
+
+      const quote = marketQuotes[id];
+      const state = statusFor(id, quote);
+      const priceNode = card.querySelector(".market-price");
+      const foot = card.querySelectorAll(".market-card-foot span");
+      const statusNode = ensureStatusNode(card);
+
+      card.setAttribute("data-quote-state", state);
+      statusNode.textContent = stateLabels[state] || stateLabels.unknown;
+      statusNode.setAttribute("data-state", state);
+
+      if (priceNode && (!quote || !Number.isFinite(Number(quote.price)))) {
+        priceNode.textContent = state === "loading" ? "載入中…" : "暫無報價";
+      }
+
+      if (foot[0]) foot[0].textContent = providerFor(id, quote);
+      if (foot[1]) {
+        foot[1].textContent = quote && quote.timestamp
+          ? marketQuoteAge(quote.timestamp)
+          : (state === "loading" ? "等待資料" : "尚無報價時間");
+      }
+    });
+    updateMarketSummary();
+  }
+
+  function updateMarketSummary() {
+    const summary = document.getElementById("market-status");
+    if (!summary || typeof marketQuotes === "undefined") return;
+
+    let fresh = 0;
+    let stale = 0;
+    let failed = 0;
+    let loading = 0;
+    let unknown = 0;
+
+    MARKET_STATUS_IDS.forEach(id => {
+      const state = statusFor(id, marketQuotes[id]);
+      if (state === "fresh") fresh++;
+      else if (state === "stale") stale++;
+      else if (state === "unknown") unknown++;
+      else if (state === "failed") failed++;
+      else loading++;
+    });
+
+    const usable = fresh + stale + unknown;
+    const checkedAt = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+    const parts = [
+      usable + "/6 項有可用資料",
+      "本次成功 " + fresh + " 項",
+      "沿用舊資料 " + stale + " 項",
+      "狀態待確認 " + unknown + " 項",
+      "無報價 " + failed + " 項"
+    ];
+    if (loading) parts.push("更新中 " + loading + " 項");
+    parts.push("狀態檢查：" + checkedAt);
+
+    const nextText = parts.join("｜");
+    if (summary.textContent !== nextText) summary.textContent = nextText;
+    const dot = document.getElementById("market-live-dot");
+    if (dot) {
+      dot.classList.toggle("is-live", usable === 6 && stale === 0 && unknown === 0 && failed === 0 && loading === 0);
+      dot.classList.toggle("has-warning", stale > 0 || unknown > 0 || failed > 0);
+    }
+  }
+
+  // Track each Yahoo-backed index independently without changing its data source.
+  const previousYahooFetcher = fetchYahooChart;
+  fetchYahooChart = async function(symbol, range, interval) {
+    const matched = MARKET_SYMBOLS.find(item =>
+      item.providerSymbol === symbol && item.id !== "GOLD"
+    );
+    if (!matched) return previousYahooFetcher.apply(this, arguments);
+
+    indexStates[matched.id] = "loading";
+    try {
+      const result = await previousYahooFetcher.apply(this, arguments);
+      indexStates[matched.id] = "fresh";
+      return result;
+    } catch (error) {
+      const existing = marketQuotes[matched.id];
+      indexStates[matched.id] = existing && Number.isFinite(Number(existing.price))
+        ? "stale" : "failed";
+      throw error;
+    } finally {
+      decorateCards();
+    }
+  };
+
+  // The gold-only add-on writes source="XAUS" and stale/cached fields into marketQuotes.GOLD.
+  // Wrap the already-installed card renderer so the gold label and all card statuses survive redraws.
+  const previousMarketRenderer = renderMarketCards;
+  renderMarketCards = function() {
+    const result = previousMarketRenderer.apply(this, arguments);
+    decorateCards();
+    return result;
+  };
+
+  // Recalculate after the original batch writes its legacy "5/6" summary.
+  const summaryNode = document.getElementById("market-status");
+  if (summaryNode && typeof MutationObserver !== "undefined") {
+    const observer = new MutationObserver(() => {
+      Promise.resolve().then(updateMarketSummary);
+    });
+    observer.observe(summaryNode, { childList: true, characterData: true, subtree: true });
+  }
+
+  // Cover late-arriving XAUS gold data without coupling it to the Yahoo index batch.
+  const goldCardContainers = ["market-watchlist", "market-gold"];
+  if (typeof MutationObserver !== "undefined") {
+    goldCardContainers.forEach(id => {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const observer = new MutationObserver(() => decorateCards());
+      observer.observe(node, { childList: true, subtree: true });
+    });
+  }
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .market-card-update-state{
+      display:inline-flex;align-items:center;gap:6px;
+      width:max-content;max-width:100%;margin-top:-2px;
+      font-size:.76rem;font-weight:750;line-height:1.4;
+      color:var(--muted);overflow-wrap:anywhere
+    }
+    .market-card-update-state::before{
+      content:"";width:7px;height:7px;flex:0 0 7px;border-radius:50%;
+      background:#9ca3af
+    }
+    .market-card-update-state[data-state="fresh"]{color:#16845a}
+    .market-card-update-state[data-state="fresh"]::before{background:#16a36a}
+    .market-card-update-state[data-state="stale"],
+    .market-card-update-state[data-state="unknown"]{color:#a36b13}
+    .market-card-update-state[data-state="stale"]::before,
+    .market-card-update-state[data-state="unknown"]::before{background:#e2a12b}
+    .market-card-update-state[data-state="failed"]{color:#c34f4f}
+    .market-card-update-state[data-state="failed"]::before{background:#dc5b5b}
+    .market-card-update-state[data-state="loading"]{color:var(--muted)}
+    .market-live-dot.has-warning{background:#e2a12b;box-shadow:0 0 0 4px rgba(226,161,43,.14)}
+  `;
+  document.head.appendChild(style);
+
+  // Decorate existing cards if the market page is already rendered.
+  decorateCards();
+})();
+

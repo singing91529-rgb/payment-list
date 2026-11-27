@@ -2100,3 +2100,542 @@ setInterval(()=>{if(!document.hidden&&document.querySelector("#market-tool:not([
   decorateCards();
 })();
 
+
+
+/* ---------- Subscription Manager: admin-only Supabase feature ---------- */
+(() => {
+  const TABLE = "subscription_items";
+  const FIX_MARKER = "PAYMENT_HUB_SUBSCRIPTION_MANAGER_V1";
+  if (window.__paymentHubSubscriptionManagerInstalled) return;
+  window.__paymentHubSubscriptionManagerInstalled = true;
+
+  const CATEGORY_LABELS = {
+    ai:"AI 工具",streaming:"影音串流",cloud:"雲端儲存",
+    software:"軟體／工具",membership:"會員／其他服務",other:"其他"
+  };
+  const CATEGORY_COLORS = {
+    ai:"#7c8df5",streaming:"#e58b58",cloud:"#36b6a5",
+    software:"#b18ae8",membership:"#d6ab42",other:"#8292a8"
+  };
+  const CURRENCY_SYMBOLS = {TWD:"NT$",USD:"US$",JPY:"¥",KRW:"₩",AUD:"A$",CNY:"¥"};
+  const STATUS_LABELS = {active:"使用中",paused:"已暫停",cancelled:"已取消"};
+  let items = [];
+  let currentFilter = "all";
+  let loading = false;
+
+  const node = id => document.getElementById(id);
+  const make = (tag, className, text) => {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = String(text);
+    return element;
+  };
+  const escapeText = value => String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[char]));
+  const parseDate = value => {
+    if (!value) return null;
+    const parts = String(value).slice(0,10).split("-").map(Number);
+    if (parts.length !== 3 || parts.some(v => !Number.isFinite(v))) return null;
+    return new Date(parts[0],parts[1]-1,parts[2]);
+  };
+  const dateLabel = value => {
+    const date = parseDate(value);
+    return date ? date.toLocaleDateString("zh-TW",{year:"numeric",month:"2-digit",day:"2-digit"}) : "未設定";
+  };
+  const daysFromToday = value => {
+    const date = parseDate(value);
+    if (!date) return null;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return Math.round((date.getTime()-today.getTime())/86400000);
+  };
+  const formatMoney = (value,currency="TWD") => {
+    const symbol = CURRENCY_SYMBOLS[currency] || currency+" ";
+    const amount = Number(value);
+    return symbol + (Number.isFinite(amount) ? amount.toLocaleString("zh-TW",{minimumFractionDigits:0,maximumFractionDigits:2}) : "0");
+  };
+  const cycleLabel = row => {
+    if (row.billing_cycle === "quarterly") return "每季";
+    if (row.billing_cycle === "yearly") return "每年";
+    if (row.billing_cycle === "custom") return "每 "+Math.max(1,Number(row.custom_interval_months)||1)+" 個月";
+    return "每月";
+  };
+  const monthlyAmount = row => {
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    if (row.billing_cycle === "quarterly") return amount/3;
+    if (row.billing_cycle === "yearly") return amount/12;
+    if (row.billing_cycle === "custom") return amount/Math.max(1,Number(row.custom_interval_months)||1);
+    return amount;
+  };
+  const toTwd = (amount,currency) => {
+    if (currency === "TWD") return {value:Number(amount),converted:true};
+    const rate = typeof fxRates !== "undefined" ? fxRates[currency] : null;
+    if (!rate) return {value:null,converted:false};
+    const buy = Number(rate.spotBuy);
+    const sell = Number(rate.spotSell);
+    const mid = Number.isFinite(buy) && Number.isFinite(sell) && buy > 0 && sell > 0
+      ? (buy+sell)/2
+      : (Number.isFinite(buy) && buy > 0 ? buy : (Number.isFinite(sell) && sell > 0 ? sell : null));
+    return mid ? {value:Number(amount)*mid,converted:true} : {value:null,converted:false};
+  };
+  const monthlyTwd = row => toTwd(monthlyAmount(row),row.currency||"TWD");
+  const activeItems = () => items.filter(row=>row.status==="active");
+  const setStatus = message => { const el=node("subscription-status"); if(el)el.textContent=message; };
+
+  function syncSubscriptionNav() {
+    const button = node("subscription-nav");
+    const nav = document.querySelector(".bottom-app-nav");
+    if (button) button.hidden = !adminMode;
+    if (nav) nav.classList.toggle("has-subscription-nav",!!adminMode);
+  }
+
+  function renderSummary() {
+    const active = activeItems();
+    let monthly = 0;
+    let convertedCount = 0;
+    let due7Count = 0;
+    let due7Amount = 0;
+    active.forEach(row=>{
+      const converted = monthlyTwd(row);
+      if (converted.converted) { monthly += converted.value; convertedCount++; }
+      const days = daysFromToday(row.next_charge_on);
+      if (days !== null && days >= 0 && days <= 7) {
+        due7Count++;
+        const due = toTwd(Number(row.amount),row.currency||"TWD");
+        if (due.converted) due7Amount += due.value;
+      }
+    });
+    node("subscription-monthly-total").textContent = formatMoney(monthly);
+    node("subscription-yearly-total").textContent = formatMoney(monthly*12);
+    node("subscription-active-count").textContent = String(active.length);
+    node("subscription-due-count").textContent = String(due7Count);
+    node("subscription-due-total").textContent = "預計扣款 "+formatMoney(due7Amount);
+    return {monthly,convertedCount,activeCount:active.length};
+  }
+
+  function renderDonut(active) {
+    const target = node("subscription-category-donut");
+    const legend = node("subscription-category-legend");
+    target.replaceChildren();
+    legend.replaceChildren();
+    const totals = {};
+    let all = 0;
+    active.forEach(row=>{
+      const converted = monthlyTwd(row);
+      if (!converted.converted) return;
+      const category = row.category || "other";
+      totals[category]=(totals[category]||0)+converted.value;
+      all += converted.value;
+    });
+    const entries = Object.entries(totals).filter(([,value])=>value>0).sort((a,b)=>b[1]-a[1]);
+    if (!entries.length || all <= 0) {
+      target.append(make("p","muted","目前沒有可換算的使用中訂閱資料"));
+      legend.append(make("p","muted","新增訂閱後會依類別顯示月均支出比例。"));
+      return;
+    }
+    const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("viewBox","0 0 220 220");
+    svg.setAttribute("role","img");
+    svg.setAttribute("aria-label","訂閱類別月均支出圓環圖");
+    const circumference = 2*Math.PI*76;
+    let offset = 0;
+    entries.forEach(([category,value])=>{
+      const length = circumference*(value/all);
+      const circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      circle.setAttribute("cx","110");circle.setAttribute("cy","110");circle.setAttribute("r","76");
+      circle.setAttribute("fill","none");circle.setAttribute("stroke",CATEGORY_COLORS[category]||CATEGORY_COLORS.other);
+      circle.setAttribute("stroke-width","25");
+      circle.setAttribute("stroke-dasharray",length+" "+(circumference-length));
+      circle.setAttribute("stroke-dashoffset",String(-offset));
+      circle.setAttribute("transform","rotate(-90 110 110)");
+      svg.appendChild(circle);
+      offset += length;
+    });
+    const centerText = document.createElementNS("http://www.w3.org/2000/svg","text");
+    centerText.setAttribute("x","110");centerText.setAttribute("y","104");centerText.setAttribute("text-anchor","middle");
+    centerText.setAttribute("class","subscription-donut-total");centerText.textContent="月均";
+    const centerAmount = document.createElementNS("http://www.w3.org/2000/svg","text");
+    centerAmount.setAttribute("x","110");centerAmount.setAttribute("y","127");centerAmount.setAttribute("text-anchor","middle");
+    centerAmount.setAttribute("class","subscription-donut-amount");centerAmount.textContent=Math.round(all).toLocaleString("zh-TW");
+    svg.append(centerText,centerAmount);
+    target.appendChild(svg);
+    entries.forEach(([category,value])=>{
+      const row=make("div","subscription-legend-row");
+      const dot=make("span","subscription-legend-dot");dot.style.background=CATEGORY_COLORS[category]||CATEGORY_COLORS.other;
+      const label=make("span","subscription-legend-name",CATEGORY_LABELS[category]||CATEGORY_LABELS.other);
+      const amount=make("strong","subscription-legend-value",formatMoney(value));
+      row.append(dot,label,amount);legend.appendChild(row);
+    });
+  }
+
+  function renderPaymentBars(active) {
+    const target=node("subscription-card-bars");
+    target.replaceChildren();
+    const totals={};
+    active.forEach(row=>{
+      const converted=monthlyTwd(row);
+      if(!converted.converted)return;
+      const label = row.payment_method_type==="card"
+        ? (row.card_name||"未指定信用卡")
+        : (row.payment_method_name||({bank:"銀行帳戶",wallet:"電子支付",other:"其他付款"}[row.payment_method_type]||"其他付款"));
+      totals[label]=(totals[label]||0)+converted.value;
+    });
+    const entries=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+    if(!entries.length){target.append(make("p","muted","尚無可分析的付款來源"));return;}
+    const max=Math.max(...entries.map(entry=>entry[1]),1);
+    entries.forEach(([label,value])=>{
+      const row=make("div","subscription-bar-row");
+      const top=make("div","subscription-bar-top");
+      top.append(make("span","subscription-bar-label",label),make("strong","subscription-bar-value",formatMoney(value)));
+      const track=make("div","subscription-bar-track");
+      const fill=make("span","subscription-bar-fill");fill.style.width=(value/max*100).toFixed(1)+"%";
+      track.appendChild(fill);row.append(top,track);target.appendChild(row);
+    });
+  }
+
+  function renderUpcoming() {
+    const target=node("subscription-upcoming-list");
+    target.replaceChildren();
+    const upcoming=activeItems().map(row=>({row,days:daysFromToday(row.next_charge_on)}))
+      .filter(item=>item.days!==null&&item.days<=30)
+      .sort((a,b)=>a.days-b.days);
+    if(!upcoming.length){target.append(make("p","muted","未來 30 天沒有已設定日期的訂閱扣款。"));return;}
+    upcoming.forEach(({row,days})=>{
+      const card=make("article","subscription-upcoming-card");
+      const left=make("div","subscription-upcoming-main");
+      left.append(make("strong","",row.service_name),make("small","",dateLabel(row.next_charge_on)+" · "+cycleLabel(row)));
+      const right=make("div","subscription-upcoming-side");
+      right.append(make("strong","",formatMoney(row.amount,row.currency||"TWD")),
+        make("small",days<0?"subscription-overdue":days===0?"subscription-today":"",days<0?"逾期 "+Math.abs(days)+" 天":days===0?"今天扣款":"還有 "+days+" 天"));
+      card.append(left,right);target.appendChild(card);
+    });
+  }
+
+  function renderList() {
+    const target=node("subscription-list");
+    target.replaceChildren();
+    const shown=items.filter(row=>currentFilter==="all"||row.status===currentFilter);
+    if(!shown.length){target.append(make("p","muted","目前沒有符合條件的訂閱。"));return;}
+    shown.forEach(row=>{
+      const card=make("article","subscription-item-card");
+      const head=make("div","subscription-item-head");
+      const title=make("div","subscription-item-title");
+      title.append(make("strong","",row.service_name),make("small","",row.plan_name||CATEGORY_LABELS[row.category]||"訂閱服務"));
+      const status=make("span","subscription-item-status status-"+row.status,STATUS_LABELS[row.status]||row.status);
+      head.append(title,status);
+      const amount=make("div","subscription-item-amount",formatMoney(row.amount,row.currency||"TWD")+" / "+cycleLabel(row));
+      const meta=make("div","subscription-item-meta");
+      meta.append(make("span","", "下次扣款："+dateLabel(row.next_charge_on)));
+      const payLabel=row.payment_method_type==="card"?(row.card_name||"未指定信用卡"):
+        (row.payment_method_name||({bank:"銀行帳戶",wallet:"電子支付",other:"其他付款"}[row.payment_method_type]||"其他付款"));
+      meta.append(make("span","", "付款來源："+payLabel));
+      const monthly=monthlyTwd(row);
+      const monthlyText=monthly.converted?"月均約 "+formatMoney(monthly.value):"月均換算暫不可用";
+      meta.append(make("span","",monthlyText));
+      if(row.note)card.append(head,amount,meta,make("p","subscription-item-note",row.note));
+      else card.append(head,amount,meta);
+      const actions=make("div","subscription-item-actions");
+      const edit=make("button","btn btn-secondary","編輯");edit.type="button";edit.dataset.subAction="edit";edit.dataset.subId=row.id;
+      const toggle=make("button","btn btn-secondary",row.status==="active"?"暫停":row.status==="paused"?"恢復":"重新啟用");
+      toggle.type="button";toggle.dataset.subAction="toggle";toggle.dataset.subId=row.id;
+      const cancel=make("button","btn btn-secondary","取消訂閱");cancel.type="button";cancel.dataset.subAction="cancel";cancel.dataset.subId=row.id;cancel.disabled=row.status==="cancelled";
+      const del=make("button","btn btn-danger","刪除");del.type="button";del.dataset.subAction="delete";del.dataset.subId=row.id;
+      actions.append(edit,toggle,cancel,del);card.appendChild(actions);target.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    const stats=renderSummary();
+    const active=activeItems();
+    renderDonut(active);renderPaymentBars(active);renderUpcoming();renderList();
+    const unconverted=active.filter(row=>!monthlyTwd(row).converted);
+    const note=node("subscription-analysis-note");
+    if(note){
+      note.textContent=unconverted.length
+        ? "有 "+unconverted.length+" 筆外幣訂閱目前沒有可用匯率，暫不納入新台幣統計；請先至「匯率換算」更新匯率。其餘資料按即期買賣均價估算。"
+        : "外幣訂閱使用匯率換算頁提供的即期買賣均價估算；圖表顯示使用中訂閱的月均支出。";
+    }
+    const status=node("subscription-status");
+    if(status)status.textContent="已載入 "+items.length+" 筆訂閱｜月均新台幣估算 "+formatMoney(stats.monthly)+"｜外幣依匯率換算頁資料換算";
+  }
+
+  function requireAdmin() {
+    if(!adminMode||!supabaseSession?.user?.id)throw new Error("請先登入 Payment Hub 管理帳號。");
+  }
+
+  async function loadItems() {
+    if(loading)return;
+    try{
+      requireAdmin();
+      loading=true;setStatus("正在讀取訂閱資料…");
+      if(!await ensureSessionFresh())throw new Error("管理者登入已逾期，請重新登入。");
+      items=await sbRequest("/rest/v1/"+TABLE+"?select=*&order=next_charge_on.asc.nullslast,created_at.desc",{},true);
+      if(!Array.isArray(items))items=[];
+      renderAll();
+    }catch(error){
+      setStatus(error.message||"無法讀取訂閱資料。");
+      node("subscription-list").replaceChildren(make("p","subscription-error",error.message||"讀取失敗，請確認已執行資料庫 SQL。"));
+      showToast(error.message||"訂閱資料讀取失敗。");
+    }finally{loading=false;}
+  }
+
+  function togglePaymentFields() {
+    const isCard=node("subscription-payment-type").value==="card";
+    node("subscription-card-name-wrap").hidden=!isCard;
+    node("subscription-payment-name-wrap").hidden=isCard;
+  }
+  function toggleCustomCycle() {
+    node("subscription-custom-months-wrap").hidden=node("subscription-cycle").value!=="custom";
+  }
+  function clearForm() {
+    node("subscription-form").reset();
+    node("subscription-id").value="";
+    node("subscription-form-title").textContent="新增訂閱";
+    node("subscription-form-error").textContent="";
+    node("subscription-item-status").value="active";
+    node("subscription-payment-type").value="card";
+    node("subscription-custom-months").value="1";
+    togglePaymentFields();toggleCustomCycle();
+    node("subscription-form").hidden=true;
+  }
+  function openForm(row=null) {
+    node("subscription-form").reset();
+    node("subscription-id").value=row?.id||"";
+    node("subscription-service").value=row?.service_name||"";
+    node("subscription-plan").value=row?.plan_name||"";
+    node("subscription-category").value=row?.category||"other";
+    node("subscription-amount").value=row?.amount??"";
+    node("subscription-currency").value=row?.currency||"TWD";
+    node("subscription-cycle").value=row?.billing_cycle||"monthly";
+    node("subscription-custom-months").value=String(row?.custom_interval_months||1);
+    node("subscription-started-on").value=row?.started_on||"";
+    node("subscription-next-charge").value=row?.next_charge_on||"";
+    node("subscription-payment-type").value=row?.payment_method_type||"card";
+    node("subscription-card-name").value=row?.card_name||"";
+    node("subscription-payment-name").value=row?.payment_method_name||"";
+    node("subscription-item-status").value=row?.status||"active";
+    node("subscription-note").value=row?.note||"";
+    node("subscription-form-title").textContent=row?"編輯訂閱":"新增訂閱";
+    node("subscription-form-error").textContent="";
+    togglePaymentFields();toggleCustomCycle();
+    node("subscription-form").hidden=false;
+    node("subscription-form").scrollIntoView({behavior:"smooth",block:"center"});
+  }
+
+  async function saveItem(event) {
+    event.preventDefault();
+    try{
+      requireAdmin();
+      const id=node("subscription-id").value;
+      const payload={
+        owner_id:supabaseSession.user.id,
+        service_name:node("subscription-service").value.trim(),
+        plan_name:node("subscription-plan").value.trim(),
+        category:node("subscription-category").value,
+        amount:Number(node("subscription-amount").value),
+        currency:node("subscription-currency").value,
+        billing_cycle:node("subscription-cycle").value,
+        custom_interval_months:Math.max(1,Math.min(120,Number(node("subscription-custom-months").value)||1)),
+        started_on:node("subscription-started-on").value||null,
+        next_charge_on:node("subscription-next-charge").value,
+        payment_method_type:node("subscription-payment-type").value,
+        card_name:node("subscription-payment-type").value==="card"?node("subscription-card-name").value.trim():"",
+        payment_method_name:node("subscription-payment-type").value!=="card"?node("subscription-payment-name").value.trim():"",
+        status:node("subscription-item-status").value,
+        note:node("subscription-note").value.trim(),
+        updated_at:new Date().toISOString()
+      };
+      if(!payload.service_name||!Number.isFinite(payload.amount)||payload.amount<=0||!payload.next_charge_on)throw new Error("請填寫服務名稱、有效金額及下次扣款日期。");
+      if(payload.payment_method_type==="card"&&!payload.card_name)throw new Error("請輸入信用卡名稱，例如：國泰 CUBE 或玉山 UBear。");
+      const button=node("subscription-save");button.disabled=true;button.textContent="儲存中…";
+      if(id){
+        delete payload.owner_id;
+        await sbRequest("/rest/v1/"+TABLE+"?id=eq."+encodeURIComponent(id),{
+          method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)
+        },true);
+      }else{
+        await sbRequest("/rest/v1/"+TABLE,{
+          method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)
+        },true);
+      }
+      clearForm();await loadItems();showToast(id?"訂閱資料已更新。":"訂閱已新增。");
+    }catch(error){node("subscription-form-error").textContent=error.message||"儲存失敗。";}
+    finally{const button=node("subscription-save");if(button){button.disabled=false;button.textContent="儲存訂閱";}}
+  }
+
+  async function updateStatus(row,next) {
+    requireAdmin();
+    await sbRequest("/rest/v1/"+TABLE+"?id=eq."+encodeURIComponent(row.id),{
+      method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},
+      body:JSON.stringify({status:next,updated_at:new Date().toISOString()})
+    },true);
+    await loadItems();
+    showToast("訂閱狀態已更新。");
+  }
+  async function deleteItem(row) {
+    requireAdmin();
+    if(!confirm("確定刪除「"+row.service_name+"」的訂閱紀錄？"))return;
+    await sbRequest("/rest/v1/"+TABLE+"?id=eq."+encodeURIComponent(row.id),{method:"DELETE"},true);
+    await loadItems();showToast("訂閱紀錄已刪除。");
+  }
+
+  node("subscription-add")?.addEventListener("click",()=>openForm());
+  node("subscription-form-close")?.addEventListener("click",clearForm);
+  node("subscription-cancel")?.addEventListener("click",clearForm);
+  node("subscription-form")?.addEventListener("submit",saveItem);
+  node("subscription-payment-type")?.addEventListener("change",togglePaymentFields);
+  node("subscription-cycle")?.addEventListener("change",toggleCustomCycle);
+  document.querySelectorAll("[data-subscription-filter]").forEach(button=>button.addEventListener("click",()=>{
+    currentFilter=button.dataset.subscriptionFilter;
+    document.querySelectorAll("[data-subscription-filter]").forEach(item=>item.classList.toggle("is-active",item===button));
+    renderList();
+  }));
+  node("subscription-list")?.addEventListener("click",async event=>{
+    const button=event.target.closest("[data-sub-action]");
+    if(!button)return;
+    const row=items.find(item=>String(item.id)===button.dataset.subId);
+    if(!row)return;
+    try{
+      const action=button.dataset.subAction;
+      if(action==="edit")openForm(row);
+      if(action==="toggle")await updateStatus(row,row.status==="active"?"paused":"active");
+      if(action==="cancel")await updateStatus(row,"cancelled");
+      if(action==="delete")await deleteItem(row);
+    }catch(error){showToast(error.message||"操作失敗。");}
+  });
+  node("subscription-refresh")?.addEventListener("click",loadItems);
+
+  function syncNav() {
+    const nav=node("subscription-nav");
+    const container=document.querySelector(".bottom-app-nav");
+    if(nav)nav.hidden=!adminMode;
+    if(container)container.classList.toggle("has-subscription-nav",!!adminMode);
+  }
+
+  const previousOpenTool=openTool;
+  openTool=function(name){
+    if(name==="subscriptions"&&!adminMode){
+      showToast("訂閱費用僅限管理者使用。");
+      return;
+    }
+    const result=previousOpenTool.apply(this,arguments);
+    if(name==="subscriptions"){
+      node("subscription-form").hidden=true;
+      loadItems();
+    }
+    return result;
+  };
+
+  const previousEnterAdminMode=enterAdminMode;
+  enterAdminMode=function(){
+    const result=previousEnterAdminMode.apply(this,arguments);
+    syncNav();
+    return result;
+  };
+
+  const previousExitAdminMode=exitAdminMode;
+  exitAdminMode=function(){
+    if(document.querySelector("#subscriptions-tool:not([hidden])"))closeTools();
+    const result=previousExitAdminMode.apply(this,arguments);
+    items=[];
+    syncNav();
+    return result;
+  };
+
+  // Ensure the new item is absent for public visitors from initial page load.
+  syncNav();
+})();
+
+
+/*
+ * Replaces the two prompt() dialogs with a semantic HTML login form.
+ * Credentials are submitted directly to the existing Supabase Auth endpoint.
+ * Passwords are never written by this patch to localStorage or the database.
+ */
+(() => {
+  "use strict";
+
+  const modal = document.getElementById("admin-auth-modal");
+  const form = document.getElementById("admin-login-form");
+  const emailInput = document.getElementById("admin-login-email");
+  const passwordInput = document.getElementById("admin-login-password");
+  const message = document.getElementById("admin-login-message");
+  const submitButton = document.getElementById("admin-login-submit");
+  if (!modal || !form || !emailInput || !passwordInput || !message || !submitButton) {
+    console.warn("Admin autofill login UI is missing. The original admin login remains active.");
+    return;
+  }
+
+  function closeAdminLogin() {
+    modal.hidden = true;
+    message.textContent = "";
+    form.reset();
+  }
+
+  // The existing Admin Mode button calls this function when the user is logged out.
+  requestAdminAccess = function requestAdminAccess() {
+    message.textContent = "";
+    modal.hidden = false;
+    window.setTimeout(() => emailInput.focus(), 30);
+  };
+
+  // Keep the original Supabase password-grant and payment_admins authorization check.
+  signInAdmin = async function signInAdmin(email, password) {
+    const session = await sbRequest("/auth/v1/token?grant_type=password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    setSession(session);
+
+    const admins = await sbRequest(
+      `/rest/v1/payment_admins?select=user_id&user_id=eq.${encodeURIComponent(session.user.id)}`,
+      {},
+      true
+    );
+    if (!admins.length) {
+      setSession(null);
+      throw new Error("此帳號尚未取得 Payment Hub 管理者權限。");
+    }
+
+    await loadCloudPayments();
+    await loadCloudHistory();
+    enterAdminMode();
+  };
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (submitButton.disabled) return;
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+      message.textContent = "請輸入管理員 Email 與密碼。";
+      return;
+    }
+
+    submitButton.disabled = true;
+    submitButton.textContent = "登入中…";
+    message.textContent = "正在驗證管理員帳號…";
+    try {
+      await signInAdmin(email, password);
+      closeAdminLogin();
+      showToast("已成功登入管理模式。");
+    } catch (error) {
+      message.textContent = error?.message || "管理員登入失敗，請確認帳號與密碼。";
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "登入管理模式";
+    }
+  });
+
+  modal.querySelectorAll("[data-admin-auth-close]").forEach(button => {
+    button.addEventListener("click", closeAdminLogin);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !modal.hidden) closeAdminLogin();
+  });
+})();
+
